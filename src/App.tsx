@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useLockSession } from "@/page/use-lock-session";
@@ -13,6 +14,7 @@ function App() {
   const handleUnlocked = () => setTransitionKey((k) => k + 1);
 
   return (
+    <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
     <TooltipProvider>
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         {session.status === null && <LoadingScreen />}
@@ -49,6 +51,7 @@ function App() {
       </div>
       <Toaster />
     </TooltipProvider>
+    </ThemeProvider>
   );
 }
 
