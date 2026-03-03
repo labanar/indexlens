@@ -992,6 +992,7 @@ function BodyEditor({
         autocompletion({
           override: [esDslCompletions(fields, endpoint)],
           activateOnTyping: true,
+          selectOnOpen: false,
         }),
         keymap.of([
           {
