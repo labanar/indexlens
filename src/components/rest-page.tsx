@@ -231,9 +231,10 @@ interface RestPageProps {
   pendingQuery?: PendingRestQuery | null;
   consumePendingQuery?: () => PendingRestQuery | null;
   vimMode?: boolean;
+  onVimModeChange?: (enabled: boolean) => void;
 }
 
-export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode }: RestPageProps) {
+export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, onVimModeChange }: RestPageProps) {
   const [method, setMethod] = useState<string>("GET");
   const [endpoint, setEndpoint] = useState("");
   const [loading, setLoading] = useState(false);
@@ -489,6 +490,20 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode }
             <SaveIcon className="size-4" />
           </Button>
         </div>
+
+        {onVimModeChange && (
+          <div className="flex justify-end">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={vimMode ?? false}
+                onChange={(e) => onVimModeChange(e.target.checked)}
+                className="size-3.5 rounded border-input accent-primary"
+              />
+              <span className="text-xs text-muted-foreground">Vim mode</span>
+            </label>
+          </div>
+        )}
 
         {/* Body editor */}
         <div className="flex-1 overflow-hidden rounded-md border min-h-0 relative">
