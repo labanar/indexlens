@@ -4,14 +4,16 @@ import { EditorState } from "@codemirror/state";
 import { vim, getCM } from "@replit/codemirror-vim";
 import { json, jsonParseLinter } from "@codemirror/lang-json";
 import { linter, lintGutter } from "@codemirror/lint";
-import { foldGutter } from "@codemirror/language";
+import { foldGutter, indentOnInput, bracketMatching } from "@codemirror/language";
 import {
   autocompletion,
   acceptCompletion,
   startCompletion,
+  closeBrackets,
+  closeBracketsKeymap,
 } from "@codemirror/autocomplete";
 import type { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
-import { history, historyKeymap } from "@codemirror/commands";
+import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands";
 import {
   PlayIcon,
   CopyIcon,
@@ -1061,7 +1063,28 @@ function BodyEditor({
               return true;
             },
           },
+          {
+            key: "Shift-Alt-f",
+            run: (view) => {
+              try {
+                const text = view.state.doc.toString();
+                const formatted = JSON.stringify(JSON.parse(text), null, 2);
+                if (formatted !== text) {
+                  view.dispatch({
+                    changes: { from: 0, to: text.length, insert: formatted },
+                  });
+                }
+              } catch {
+                // JSON is invalid, skip formatting
+              }
+              return true;
+            },
+          },
         ]),
+        bracketMatching(),
+        closeBrackets(),
+        indentOnInput(),
+        keymap.of([...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString());
