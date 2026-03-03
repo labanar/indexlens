@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navbar } from "@/components/navbar";
-import { AddClusterDialog } from "@/components/add-cluster-dialog";
+import { ClusterDialog } from "@/components/add-cluster-dialog";
 import { IndicesPage } from "@/components/indices-page";
 import { DocumentsPage } from "@/components/documents-page";
 import { RestPage } from "@/components/rest-page";
@@ -20,7 +20,8 @@ interface UnlockedShellProps {
 
 export function UnlockedShell({ onLock }: UnlockedShellProps) {
   const [clusters, setClusters] = useState<ClusterConfig[]>([]);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingCluster, setEditingCluster] = useState<ClusterConfig | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
   const { clusterId, page, indexName, navigate, navigateCluster, navigatePage, navigateIndex } =
@@ -64,11 +65,34 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
     await saveCredential(CLUSTERS_CREDENTIAL_ID, JSON.stringify(next));
   }, []);
 
-  const handleAddCluster = async (cluster: ClusterConfig) => {
-    const next = [...clusters, cluster];
+  const handleAddCluster = () => {
+    setEditingCluster(undefined);
+    setDialogOpen(true);
+  };
+
+  const handleEditCluster = (cluster: ClusterConfig) => {
+    setEditingCluster(cluster);
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = async (cluster: ClusterConfig) => {
+    let next: ClusterConfig[];
+    if (editingCluster) {
+      // Replace existing cluster in-place (preserve ordering)
+      next = clusters.map((c) => (c.id === cluster.id ? cluster : c));
+    } else {
+      next = [...clusters, cluster];
+      navigate(cluster.id, "dashboard");
+    }
     setClusters(next);
-    navigate(cluster.id, "dashboard");
     await persistClusters(next);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setEditingCluster(undefined);
+    }
   };
 
   if (!loaded) {
@@ -86,7 +110,8 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
         activeCluster={activeCluster}
         activePage={page}
         onSelectCluster={(c) => navigateCluster(c.id)}
-        onAddCluster={() => setAddDialogOpen(true)}
+        onAddCluster={handleAddCluster}
+        onEditCluster={handleEditCluster}
         onNavigate={navigatePage}
         onLock={onLock}
       />
@@ -116,10 +141,11 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
         )}
       </main>
 
-      <AddClusterDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        onAdd={handleAddCluster}
+      <ClusterDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        onSubmit={handleDialogSubmit}
+        initial={editingCluster}
       />
     </div>
   );
