@@ -1,8 +1,45 @@
 # IndexLens
 
-A Chrome extension for viewing Elasticsearch data with encrypted credential storage.
+A Chrome extension for exploring Elasticsearch clusters with encrypted credential storage. Browse indices, inspect documents, and run queries — all without leaving your browser.
 
-## Development
+## Features
+
+- **Spotlight search** — Press `Ctrl+Space` to open a spotlight-style command palette. Search across pages, indices, aliases, and saved queries instantly.
+- **Keyboard-driven navigation** — Cycle between Dashboard, Indices, and REST Console pages with `Shift+T`. Lock the session with `Ctrl+L`.
+- **REST Console with intelligent autocomplete** — A full-featured REST client with endpoint autocomplete (index names, ES operations), request body autocomplete (Elasticsearch DSL keywords and field names from index mappings), request history, and saved queries.
+- **Index & document browser** — View all indices in a cluster, drill into an index to browse its documents, view field mappings, and search with custom queries.
+- **Encrypted credential vault** — Cluster configurations and credentials are encrypted at rest using AES-256-GCM with a passphrase-derived key. Your passphrase is never stored. See [Security Model](#security-model) for details.
+- **Idle auto-lock** — The session automatically locks after 5 minutes of inactivity, wiping the derived key from memory.
+
+## Screenshots
+
+<!-- Replace each placeholder with an actual screenshot -->
+
+### Setup Screen
+<!-- ![Setup Screen](docs/screenshots/setup-screen.png) -->
+`TODO: Add screenshot of the first-run passphrase setup screen`
+
+### Lock Screen
+<!-- ![Lock Screen](docs/screenshots/lock-screen.png) -->
+`TODO: Add screenshot of the lock/unlock screen`
+
+### Dashboard
+<!-- ![Dashboard](docs/screenshots/dashboard.png) -->
+`TODO: Add screenshot of the cluster dashboard overview`
+
+### Spotlight Search
+<!-- ![Spotlight Search](docs/screenshots/spotlight-search.png) -->
+`TODO: Add screenshot of the spotlight command palette (Ctrl+Space)`
+
+### Indices & Documents
+<!-- ![Indices](docs/screenshots/indices.png) -->
+`TODO: Add screenshot of the indices list and document browser`
+
+### REST Console
+<!-- ![REST Console](docs/screenshots/rest-console.png) -->
+`TODO: Add screenshot of the REST console with autocomplete visible`
+
+## Getting Started
 
 ### Prerequisites
 
@@ -16,20 +53,12 @@ npm install
 npm run build
 ```
 
-### Lint & Type-Check
-
-```bash
-npm run lint
-npm run build   # runs tsc -b before vite build
-```
-
 ### Load in Chrome
 
 1. Run `npm run build` to produce the `dist/` folder.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Click **Load unpacked** and select the `dist/` directory.
-4. The extension registers a background service worker (`background.js`) and a full-page options UI (`index.html`).
-5. Click the extension toolbar icon to open IndexLens. The icon opens the full-page UI in a new tab (or focuses an existing one).
+4. Click the IndexLens toolbar icon to open the extension in a new tab (or focus an existing one).
 
 ### Development Server
 
@@ -38,6 +67,54 @@ npm run dev
 ```
 
 > **Note:** The dev server is useful for iterating on UI, but `chrome.runtime` APIs (messaging, storage, ports) only work when loaded as an unpacked extension.
+
+## Hotkeys
+
+| Shortcut | Action | Context |
+|---|---|---|
+| `Ctrl+Space` | Toggle spotlight search | Anywhere while unlocked |
+| `Ctrl+L` | Lock the session | Anywhere while unlocked |
+| `Shift+T` | Cycle to the next page (Dashboard / Indices / REST) | When focus is not in a text input |
+| `Enter` | Execute request (endpoint editor) | REST Console endpoint field |
+| `Ctrl+Enter` | Execute request (body editor) | REST Console body editor |
+| `Tab` | Accept or trigger autocomplete | REST Console editors |
+
+## Security Model
+
+IndexLens encrypts all cluster configurations and credentials at rest using a passphrase-derived key. The passphrase itself is **never stored** — not in `chrome.storage.local`, not on disk, nowhere.
+
+### How It Works
+
+1. **Passphrase setup** — On first launch the user creates a passphrase (minimum 8 characters). A random 16-byte salt is generated and used with PBKDF2 (600,000 iterations, SHA-256) to derive an AES-256-GCM key. A known verifier string is encrypted with that key and stored alongside the salt in `chrome.storage.local` so future unlocks can validate the passphrase without persisting it.
+
+2. **Unlock** — On subsequent sessions the user enters their passphrase. The extension re-derives the key from the stored salt via PBKDF2 and attempts to decrypt the verifier. If decryption succeeds and the plaintext matches, the session is unlocked and the derived `CryptoKey` is held in the service worker's memory.
+
+3. **Credential storage** — Each credential is encrypted with AES-256-GCM using a unique random 12-byte IV and stored in `chrome.storage.local`. Credentials can only be read, written, or deleted while the session is unlocked. All credential operations return an explicit "Locked" error when the key is not available.
+
+4. **Idle auto-lock** — A configurable inactivity timeout (default: 5 minutes) automatically wipes the derived key from memory and locks the session. The timeout resets on meaningful user activity (key presses, mouse clicks, window focus) forwarded from the page over a long-lived port to the background service worker.
+
+### Key Design Decisions
+
+- **WebCrypto only** — All cryptographic operations use the browser's native `crypto.subtle` API. No third-party crypto libraries are included.
+- **PBKDF2 with 600,000 iterations** — Provides brute-force resistance for the passphrase derivation step.
+- **AES-256-GCM** — Authenticated encryption ensures both confidentiality and integrity of stored credentials.
+- **In-memory key** — The derived `CryptoKey` lives only in the service worker's memory and is never serialised or written to storage. It is cleared on lock.
+- **Versioned payloads** — Every encrypted envelope carries a version tag for future migration support.
+
+## Development
+
+### Lint & Type-Check
+
+```bash
+npm run lint
+npm run build   # runs tsc -b before vite build
+```
+
+### Unit Tests
+
+```bash
+npm run test
+```
 
 ### E2E Tests (Playwright)
 
@@ -71,70 +148,6 @@ Chrome extensions cannot run in headless mode, so all E2E tests launch a visible
 xvfb-run npm run test:e2e
 ```
 
-#### What the Tests Cover
-
-| Test suite | Description |
-|---|---|
-| **First-run setup** | Setup screen appears on first launch; rejects short passphrases; rejects mismatched confirmation; successfully creates passphrase and transitions to unlocked view. |
-| **Unlock and lock lifecycle** | Unlocks with valid passphrase; shows error and stays locked with invalid passphrase. |
-| **Auto-lock after inactivity** | Verifies the session re-locks after the configured idle timeout elapses without user activity. |
-| **Lock hotkey** | Pressing Ctrl+L from the unlocked state transitions to the lock screen. |
-| **Toolbar icon click** | Regression test ensuring clicking the extension icon opens the options page (previously "nothing happens" on click). |
-
-#### Troubleshooting
-
-- **`Cannot find module @rollup/rollup-linux-x64-gnu`** — Delete `node_modules` and `package-lock.json`, then run `npm install` again.
-- **`error while loading shared libraries`** — Run `npx playwright install-deps chromium` to install system dependencies. Requires root/sudo on Linux.
-- **Tests time out in CI** — Ensure a virtual display is available (`xvfb-run`) since extensions require headed mode.
-- **Extension not loading** — Verify `npm run build` completed successfully and the `dist/` directory contains `manifest.json`, `background.js`, and `index.html`.
-
-## Security Model
-
-IndexLens encrypts all Elasticsearch credentials at rest using a passphrase-derived key. The passphrase itself is never stored.
-
-### How It Works
-
-1. **First-run setup** - The user creates a passphrase (minimum 8 characters). A PBKDF2-derived AES-256-GCM key is produced from the passphrase and a random salt. A known verifier string is encrypted and stored alongside the salt so future unlocks can validate the passphrase without persisting it.
-
-2. **Unlocking** - On subsequent sessions the user enters their passphrase. The extension re-derives the key from the stored salt and attempts to decrypt the verifier. If decryption succeeds and the plaintext matches, the session is unlocked and the derived key is held in the service worker's memory.
-
-3. **Credential storage** - Each credential is encrypted with AES-256-GCM using a unique random IV and stored in `chrome.storage.local`. Credentials can only be read, written, or deleted while the session is unlocked. All credential operations return an explicit "Locked" error when the session is locked.
-
-4. **Idle auto-lock** - A configurable inactivity timeout (default: 5 minutes) automatically wipes the derived key and locks the session. The timeout resets only on meaningful user activity (key presses, mouse clicks, window focus) forwarded from the page over a long-lived port to the background worker.
-
-5. **Keep-alive port** - The page maintains a persistent `chrome.runtime.Port` connection to the background. Activity signals travel over this port, and the background broadcasts lock-status changes back to the page for immediate UI updates.
-
-### Key Design Decisions
-
-- **WebCrypto only** - All cryptographic operations use the browser's native `crypto.subtle` API. No third-party crypto libraries.
-- **PBKDF2 with 600,000 iterations** - Provides brute-force resistance for the passphrase derivation step.
-- **AES-256-GCM** - Authenticated encryption ensures both confidentiality and integrity of stored credentials.
-- **In-memory key** - The derived `CryptoKey` lives only in the service worker's memory and is cleared on lock. It is never serialised or written to storage.
-- **Versioned payloads** - Every encrypted envelope carries a version tag for future migration support.
-
-## Manual Verification Checklist
-
-### First-Run Setup
-- [ ] Open the extension for the first time and see the "Welcome to IndexLens" setup screen.
-- [ ] Attempt to submit a passphrase shorter than 8 characters and confirm validation prevents it.
-- [ ] Enter a valid passphrase, intentionally mismatch the confirmation, and verify the error.
-- [ ] Enter a valid passphrase with matching confirmation, click "Create passphrase", and confirm you are taken to the unlocked view.
-
-### Unlock Persistence During Active Use
-- [ ] Close and reopen the extension tab. Confirm you see the lock screen (not setup).
-- [ ] Enter the correct passphrase and verify unlock succeeds.
-- [ ] Interact with the page (click, type) and confirm the session stays unlocked beyond the 5-minute timeout window.
-- [ ] Enter an incorrect passphrase and verify an error is shown.
-
-### Lock Hotkey
-- [ ] While unlocked, press Ctrl+L and confirm the app transitions to the lock screen.
-- [ ] Verify the browser does not perform its default action (e.g. focus the address bar) when pressing Ctrl+L.
-
-### Automatic Re-Lock After Idle
-- [ ] Unlock the extension and leave it idle (no mouse/keyboard activity) for longer than 5 minutes.
-- [ ] Confirm the UI transitions back to the lock screen automatically.
-- [ ] Verify you can unlock again with the correct passphrase.
-
 ## Project Structure
 
 ```
@@ -152,9 +165,20 @@ src/
     setup-screen.tsx    - First-run passphrase creation UI
     lock-screen.tsx     - Locked passphrase entry UI
     unlocked-shell.tsx  - Unlocked application shell
+  components/
+    spotlight-search.tsx - Spotlight command palette (Ctrl+Space)
+    rest-page.tsx        - REST console with autocomplete and history
+    indices-page.tsx     - Index browser
+    documents-page.tsx   - Document viewer
+    dashboard-page.tsx   - Cluster dashboard
+    navbar.tsx           - Navigation bar
   App.tsx           - Root component routing between lock states
   main.tsx          - React entry point
 tests/
   fixtures.ts       - Playwright fixtures: persistent context, extension ID, page
   extension.spec.ts - E2E tests for lock flow, setup, and toolbar behavior
 ```
+
+## License
+
+This project is not yet published under a specific license.
