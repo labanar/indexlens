@@ -472,6 +472,111 @@ test.describe("Encrypted config transfer", () => {
 });
 
 // ---------------------------------------------------------------------------
+// REST body autocomplete behavior
+// ---------------------------------------------------------------------------
+
+test.describe("REST body autocomplete", () => {
+  test("does not accept first suggestion on Enter without explicit selection", async ({ extensionPage }) => {
+    let searchRequestCount = 0;
+
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ index: "products" }]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        });
+        return;
+      }
+
+      if (url.endsWith("/products/_search") && req.method() === "POST") {
+        searchRequestCount += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ took: 1, hits: { total: { value: 0, relation: "eq" }, hits: [] } }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    // First-run setup
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Add a cluster so REST page is available.
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Autocomplete Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    // Open REST page and prepare a POST search request.
+    await extensionPage.getByRole("button", { name: /^rest$/i }).click();
+    await extensionPage.getByRole("combobox").click();
+    await extensionPage.getByRole("option", { name: /^POST$/ }).click();
+
+    const endpointEditor = extensionPage.locator(".cm-editor").first();
+    await endpointEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("/products/_search");
+
+    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
+    await bodyEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("{\n  \"");
+
+    const completionMenu = extensionPage.locator(".cm-tooltip-autocomplete");
+    await expect(completionMenu).toBeVisible();
+
+    // Enter should insert a newline, not accept the first completion.
+    await extensionPage.keyboard.press("Enter");
+    let bodyText = await bodyEditor.locator(".cm-content").innerText();
+    expect(bodyText.split("\n").length).toBeGreaterThan(3);
+    expect(bodyText).not.toContain("\"query\"");
+
+    // Explicit selection (ArrowDown + Tab) should still accept a completion.
+    await bodyEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("{\n  \"");
+    await expect(completionMenu).toBeVisible();
+    await extensionPage.keyboard.press("ArrowDown");
+    await extensionPage.keyboard.press("Tab");
+    bodyText = await bodyEditor.locator(".cm-content").innerText();
+    expect(bodyText).toContain("\"query\"");
+
+    // Ctrl+Enter send shortcut should continue to execute the request.
+    await extensionPage.keyboard.press("Control+Enter");
+    await expect.poll(() => searchRequestCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Toolbar icon click
 // ---------------------------------------------------------------------------
 
