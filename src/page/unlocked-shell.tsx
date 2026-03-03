@@ -61,6 +61,11 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
 
   const activeCluster = clusters.find((c) => c.id === clusterId) ?? null;
 
+  // Update browser tab title based on active cluster
+  useEffect(() => {
+    document.title = activeCluster ? `IndexLens | ${activeCluster.name}` : "IndexLens";
+  }, [activeCluster?.name]);
+
   // Load clusters from encrypted vault on mount
   useEffect(() => {
     (async () => {

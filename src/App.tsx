@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -12,6 +12,13 @@ function App() {
   const [transitionKey, setTransitionKey] = useState(0);
 
   const handleUnlocked = () => setTransitionKey((k) => k + 1);
+
+  // Reset tab title when not in unlocked state (e.g. after locking)
+  useEffect(() => {
+    if (session.status !== "unlocked") {
+      document.title = "IndexLens";
+    }
+  }, [session.status]);
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
