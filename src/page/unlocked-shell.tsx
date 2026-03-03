@@ -309,6 +309,7 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
             pendingQuery={pendingRestQuery}
             consumePendingQuery={consumePendingRestQuery}
             vimMode={vimMode}
+            onVimModeChange={handleVimModeChange}
           />
         ) : (
           <DashboardPage cluster={activeCluster} />
