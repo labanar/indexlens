@@ -595,6 +595,130 @@ test.describe("REST body autocomplete", () => {
     await extensionPage.keyboard.press("Control+Enter");
     await expect.poll(() => searchRequestCount).toBe(1);
   });
+
+  test("shows field suggestions when endpoint uses an alias that maps to multiple indices", async ({ extensionPage }) => {
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const url = route.request().url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { index: "orders-2024" },
+            { index: "orders-2025" },
+          ]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ alias: "orders-alias" }]),
+        });
+        return;
+      }
+
+      // Mock alias mapping response — returns fields from two backing indices
+      if (url.includes("/orders-alias/_mapping")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            "orders-2024": {
+              mappings: {
+                properties: {
+                  order_id: { type: "keyword" },
+                  amount: { type: "float" },
+                  customer: {
+                    properties: {
+                      name: { type: "text" },
+                    },
+                  },
+                },
+              },
+            },
+            "orders-2025": {
+              mappings: {
+                properties: {
+                  order_id: { type: "keyword" },
+                  amount: { type: "float" },
+                  discount: { type: "float" },
+                  customer: {
+                    properties: {
+                      name: { type: "text" },
+                      email: { type: "keyword" },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    // First-run setup
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Add a cluster
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Alias Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    // Navigate to REST page and switch to POST
+    await extensionPage.getByRole("button", { name: /^rest$/i }).click();
+    await extensionPage.getByRole("combobox").click();
+    await extensionPage.getByRole("option", { name: /^POST$/ }).click();
+
+    const endpointEditor = extensionPage.locator(".cm-editor").first();
+    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
+
+    // Type the alias endpoint
+    await endpointEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("/orders-alias/_search");
+
+    // Wait for the debounced mapping fetch to complete
+    await extensionPage.waitForTimeout(600);
+
+    // Focus the body editor and trigger field autocomplete
+    await bodyEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    // Start a match query so field names are suggested
+    await extensionPage.keyboard.type("{\n  \"query\": {\n    \"match\": {\n      \"");
+
+    const completionMenu = extensionPage.locator(".cm-tooltip-autocomplete");
+    await expect(completionMenu).toBeVisible({ timeout: 5_000 });
+
+    // Verify fields from BOTH backing indices are suggested
+    const completionText = await completionMenu.innerText();
+    expect(completionText).toContain("amount");
+    expect(completionText).toContain("order_id");
+    // "discount" only exists in orders-2025 — confirms multi-index merge
+    expect(completionText).toContain("discount");
+    // Nested field from orders-2025
+    expect(completionText).toContain("customer.email");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -111,13 +111,22 @@ const ES_OPERATIONS: Completion[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Extract index name from a path like "/my-index/_search" → "my-index" */
-function extractIndexFromPath(path: string): string | null {
-  const trimmed = path.replace(/^\/+/, "");
+/** Extract a mapping target from a REST endpoint path like "/my-alias/_search" -> "my-alias". */
+function extractMappingTarget(path: string): string | null {
+  // Strip query string and fragment
+  const cleaned = path.split("?")[0].split("#")[0];
+  const trimmed = cleaned.replace(/^\/+/, "");
   if (!trimmed) return null;
-  const first = trimmed.split("/")[0];
-  if (!first || first.startsWith("_")) return null;
-  return decodeURIComponent(first);
+
+  const firstSegment = trimmed.split("/")[0];
+  if (!firstSegment) return null;
+
+  // Reject if every comma-separated target starts with "_" (system endpoint)
+  const targets = firstSegment.split(",");
+  const hasUserTarget = targets.some((t) => !t.trim().startsWith("_"));
+  if (!hasUserTarget) return null;
+
+  return firstSegment;
 }
 
 function buildEndpointCompletions(indexNames: string[]) {
@@ -297,16 +306,16 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
     return () => controller.abort();
   }, [cluster]);
 
-  // Fetch mapping fields when the endpoint targets a specific index
+  // Fetch mapping fields when the endpoint targets a specific index/alias/pattern
   useEffect(() => {
-    const indexName = extractIndexFromPath(debouncedEndpoint);
-    if (!indexName) {
+    const target = extractMappingTarget(debouncedEndpoint);
+    if (!target) {
       setFields([]);
       return;
     }
 
     const controller = new AbortController();
-    fetchIndexFields(cluster, indexName, controller.signal)
+    fetchIndexFields(cluster, target, controller.signal)
       .then(setFields)
       .catch(() => setFields([]));
     return () => controller.abort();
