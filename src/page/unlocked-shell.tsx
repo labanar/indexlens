@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Navbar } from "@/components/navbar";
+import { Navbar, NAV_ITEMS } from "@/components/navbar";
 import { ClusterDialog } from "@/components/add-cluster-dialog";
 import { DashboardPage } from "@/components/dashboard-page";
 import { IndicesPage } from "@/components/indices-page";
@@ -100,11 +100,20 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
       } else if (e.ctrlKey && e.key === "l") {
         e.preventDefault();
         void onLock();
+      } else if (e.shiftKey && e.key === "T") {
+        const target = e.target as HTMLElement;
+        const isInputField = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+        if (!isInputField) {
+          e.preventDefault();
+          const currentIndex = NAV_ITEMS.findIndex((item) => item.page === page);
+          const nextIndex = (currentIndex + 1) % NAV_ITEMS.length;
+          navigatePage(NAV_ITEMS[nextIndex].page);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onLock]);
+  }, [onLock, page, navigatePage]);
 
   // -----------------------------------------------------------------------
   // Spotlight: fetch indices + aliases when opened (or cluster changes)
