@@ -61,6 +61,15 @@ npm run build
 3. Click **Load unpacked** and select the `dist/` directory.
 4. Click the IndexLens toolbar icon to open the extension in a new tab (or focus an existing one).
 
+### Branding Assets
+
+- Editable source icon: `docs/assets/indexlens-icon-source.svg`
+- Generated runtime assets (copied to `dist/` by Vite): `public/indexlens-favicon.svg` and `public/indexlens-icon-{16,32,48,128}.png`
+- Regenerate PNG/icon assets from source:
+  ```bash
+  python3 scripts/generate-icons.py
+  ```
+
 ### Development Server
 
 ```bash
