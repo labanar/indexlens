@@ -43,7 +43,7 @@ export function LockScreen({
         </CardDescription>
       </CardHeader>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="passphrase" className="text-sm font-medium">
