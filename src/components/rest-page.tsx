@@ -53,7 +53,7 @@ import { cmTheme, cmViewerTheme } from "@/lib/codemirror-theme";
 import { esRequest } from "@/lib/es-client";
 import { fetchIndexFields } from "@/lib/es-mapping";
 import { esDslCompletions } from "@/lib/es-query-completions";
-import { autoMethodForEndpoint } from "@/lib/es-endpoint-method";
+import { autoMethodForEndpoint, isTerminalEndpointAction } from "@/lib/es-endpoint-method";
 import { useDebounce } from "@/hooks/use-debounce";
 import {
   loadHistory,
@@ -264,6 +264,7 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
   const supportsBody = method === "POST" || method === "PUT";
   const bodyRef = useRef("");
   const endpointRef = useRef("");
+  const bodyEditorViewRef = useRef<EditorView | null>(null);
   const debouncedEndpoint = useDebounce(endpoint, 400);
 
   // Load history + saved queries when cluster changes
@@ -356,6 +357,18 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
     setHistoryEntries(updated);
     saveHistory(cluster.id, updated);
   }, [cluster, method, historyEntries]);
+
+  const focusBodyEditor = useCallback(() => {
+    if (!supportsBody) return false;
+    const bodyView = bodyEditorViewRef.current;
+    if (!bodyView) return false;
+    bodyView.focus();
+    return true;
+  }, [supportsBody]);
+
+  const handleBodyViewReady = useCallback((view: EditorView | null) => {
+    bodyEditorViewRef.current = view;
+  }, []);
 
   const handleCopy = async () => {
     if (!response) return;
@@ -467,6 +480,7 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
                 }
               }}
               onExecute={handleSend}
+              onFocusBodyEditor={focusBodyEditor}
               vimMode={vimMode}
               onVimStatus={setVimStatus}
             />
@@ -528,6 +542,7 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
               initialValue={initialBodyRef.current}
               onSend={handleSend}
               onChange={(v) => { bodyRef.current = v; }}
+              onViewReady={handleBodyViewReady}
               vimMode={vimMode}
               onVimStatus={setVimStatus}
             />
@@ -862,6 +877,7 @@ function EndpointEditor({
   initialValue,
   onChange,
   onExecute,
+  onFocusBodyEditor,
   vimMode,
   onVimStatus,
 }: {
@@ -869,6 +885,7 @@ function EndpointEditor({
   initialValue?: string;
   onChange: (value: string) => void;
   onExecute: () => void;
+  onFocusBodyEditor?: () => boolean;
   vimMode?: boolean;
   onVimStatus?: (status: VimStatus) => void;
 }) {
@@ -878,6 +895,8 @@ function EndpointEditor({
   onExecuteRef.current = onExecute;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onFocusBodyEditorRef = useRef(onFocusBodyEditor);
+  onFocusBodyEditorRef.current = onFocusBodyEditor;
   const onVimStatusRef = useRef(onVimStatus);
   onVimStatusRef.current = onVimStatus;
 
@@ -900,6 +919,12 @@ function EndpointEditor({
           key: "Tab",
           run: (view) => {
             if (acceptCompletion(view)) return true;
+
+            const endpoint = view.state.doc.toString();
+            if (isTerminalEndpointAction(endpoint) && onFocusBodyEditorRef.current?.()) {
+              return true;
+            }
+
             startCompletion(view);
             return true;
           },
@@ -965,6 +990,7 @@ function BodyEditor({
   initialValue,
   onSend,
   onChange,
+  onViewReady,
   vimMode,
   onVimStatus,
 }: {
@@ -973,6 +999,7 @@ function BodyEditor({
   initialValue?: string;
   onSend: () => void;
   onChange: (value: string) => void;
+  onViewReady?: (view: EditorView | null) => void;
   vimMode?: boolean;
   onVimStatus?: (status: VimStatus) => void;
 }) {
@@ -1043,12 +1070,14 @@ function BodyEditor({
 
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
+    onViewReady?.(view);
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      onViewReady?.(null);
     };
-  }, [fields, endpoint, vimMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fields, endpoint, onViewReady, vimMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

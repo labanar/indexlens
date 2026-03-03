@@ -21,6 +21,15 @@ const GET_ACTIONS = new Set([
   "_nodes/stats",
 ]);
 
+const TERMINAL_ACTIONS = new Set([
+  ...POST_ACTIONS,
+  ...GET_ACTIONS,
+  "_count",
+  "_mapping",
+  "_settings",
+  "_analyze",
+]);
+
 type PreferredHttpMethod = "GET" | "POST";
 
 function normalizeEndpoint(endpoint: string): string[] {
@@ -62,5 +71,16 @@ export function inferPreferredHttpMethod(endpoint: string): PreferredHttpMethod 
 
 export function autoMethodForEndpoint(endpoint: string, defaultMethod: PreferredHttpMethod = "GET"): PreferredHttpMethod {
   return inferPreferredHttpMethod(endpoint) ?? defaultMethod;
+}
+
+export function isTerminalEndpointAction(endpoint: string): boolean {
+  const segments = normalizeEndpoint(endpoint);
+  if (segments.length === 0) return false;
+
+  for (const candidate of getActionCandidates(segments)) {
+    if (TERMINAL_ACTIONS.has(candidate)) return true;
+  }
+
+  return false;
 }
 
