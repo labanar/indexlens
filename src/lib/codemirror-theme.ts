@@ -15,6 +15,7 @@ const green = "#50fa7b";
 const orange = "#ffb86c";
 const pink = "#ff79c6";
 const purple = "#bd93f9";
+const red = "#ff5555";
 const yellow = "#f1fa8c";
 
 // ---------------------------------------------------------------------------
@@ -152,6 +153,58 @@ const viewerTheme = EditorView.theme({
   ".cm-matchingBracket": {
     backgroundColor: currentLine,
     outline: `1px solid ${orange}`,
+  },
+  ".cm-tooltip": {
+    backgroundColor: bg,
+    color: fg,
+    border: `1px solid ${currentLine}`,
+    borderRadius: "6px",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+    fontFamily:
+      "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    fontSize: "13px",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+    padding: "2px 8px",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+    backgroundColor: currentLine,
+    color: fg,
+  },
+  ".cm-tooltip-autocomplete .cm-completionDetail": {
+    color: comment,
+    fontStyle: "normal",
+    marginLeft: "8px",
+  },
+  ".cm-tooltip-autocomplete .cm-completionMatchedText": {
+    textDecoration: "none",
+    color: green,
+    fontWeight: "600",
+  },
+  // Lint diagnostics
+  ".cm-diagnostic": {
+    fontFamily:
+      "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    fontSize: "12px",
+    padding: "4px 8px",
+  },
+  ".cm-diagnostic-error": {
+    borderLeft: `3px solid ${red}`,
+    color: fg,
+  },
+  ".cm-tooltip-lint": {
+    backgroundColor: bg,
+    color: fg,
+    border: `1px solid ${currentLine}`,
+    borderRadius: "6px",
+  },
+  ".cm-lintRange-error": {
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%23ff5555' fill='none' stroke-width='.7'/%3E%3C/svg%3E")`,
+  },
+  ".cm-lint-marker-error": {
+    content: `"!"`,
+    color: red,
   },
 });
 

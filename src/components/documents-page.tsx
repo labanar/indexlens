@@ -46,6 +46,11 @@ import type { ClusterConfig } from "@/types/cluster";
 
 interface SearchHit {
   _id: string;
+  _index: string;
+  _version?: number;
+  _score: number | null;
+  _seq_no?: number;
+  _primary_term?: number;
   _source: Record<string, unknown>;
 }
 
@@ -222,6 +227,8 @@ export function DocumentsPage({
               from,
               size: pageSize,
               query: activeQuery,
+              version: true,
+              seq_no_primary_term: true,
             }),
             signal,
           },

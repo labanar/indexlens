@@ -3,6 +3,7 @@ import { Navbar } from "@/components/navbar";
 import { AddClusterDialog } from "@/components/add-cluster-dialog";
 import { IndicesPage } from "@/components/indices-page";
 import { DocumentsPage } from "@/components/documents-page";
+import { RestPage } from "@/components/rest-page";
 import { useHashRoute } from "@/hooks/use-hash-route";
 import {
   saveCredential,
@@ -104,6 +105,8 @@ export function UnlockedShell({ onLock }: UnlockedShellProps) {
           />
         ) : page === "indices" ? (
           <IndicesPage cluster={activeCluster} onNavigateIndex={navigateIndex} />
+        ) : page === "rest" ? (
+          <RestPage cluster={activeCluster} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6">
             <p className="text-muted-foreground">
