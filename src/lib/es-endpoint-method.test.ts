@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { autoMethodForEndpoint, inferPreferredHttpMethod } from "./es-endpoint-method";
+import {
+  autoMethodForEndpoint,
+  inferPreferredHttpMethod,
+  isTerminalEndpointAction,
+} from "./es-endpoint-method";
 
 describe("inferPreferredHttpMethod", () => {
   it("infers POST for write-style actions", () => {
@@ -49,6 +53,28 @@ describe("autoMethodForEndpoint", () => {
 
   it("uses inferred method when available", () => {
     expect(autoMethodForEndpoint("/my-index/_search")).toBe("POST");
+  });
+});
+
+describe("isTerminalEndpointAction", () => {
+  it("returns true for recognized single-segment actions", () => {
+    expect(isTerminalEndpointAction("/products/_search")).toBe(true);
+    expect(isTerminalEndpointAction("/_aliases")).toBe(true);
+    expect(isTerminalEndpointAction("/my-index/_count")).toBe(true);
+  });
+
+  it("returns true for recognized multi-segment actions", () => {
+    expect(isTerminalEndpointAction("/_cat/indices")).toBe(true);
+    expect(isTerminalEndpointAction("/_cluster/health?pretty=true")).toBe(true);
+    expect(isTerminalEndpointAction("/_nodes/stats/jvm")).toBe(true);
+  });
+
+  it("returns false for incomplete or unknown action paths", () => {
+    expect(isTerminalEndpointAction("/products/_se")).toBe(false);
+    expect(isTerminalEndpointAction("/_cat")).toBe(false);
+    expect(isTerminalEndpointAction("/_cluster")).toBe(false);
+    expect(isTerminalEndpointAction("/my-index")).toBe(false);
+    expect(isTerminalEndpointAction("")).toBe(false);
   });
 });
 

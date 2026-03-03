@@ -542,11 +542,32 @@ test.describe("REST body autocomplete", () => {
     await extensionPage.getByRole("option", { name: /^POST$/ }).click();
 
     const endpointEditor = extensionPage.locator(".cm-editor").first();
+    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
+
+    // Scenario A: incomplete endpoint keeps Tab for autocomplete/editor behavior.
+    await endpointEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("/products/_se");
+    const bodyBeforeIncompleteTab = await bodyEditor.locator(".cm-content").innerText();
+    await extensionPage.keyboard.press("Tab");
+    await extensionPage.keyboard.type("x");
+    const endpointAfterIncompleteTab = await endpointEditor.locator(".cm-content").innerText();
+    const bodyAfterIncompleteTab = await bodyEditor.locator(".cm-content").innerText();
+    expect(endpointAfterIncompleteTab).toContain("/products/_");
+    expect(bodyAfterIncompleteTab).toBe(bodyBeforeIncompleteTab);
+
+    // Scenario B: complete endpoint moves focus to body on Tab.
     await endpointEditor.click();
     await extensionPage.keyboard.press("Control+a");
     await extensionPage.keyboard.type("/products/_search");
+    const endpointBeforeCompleteTab = await endpointEditor.locator(".cm-content").innerText();
+    await extensionPage.keyboard.press("Tab");
+    await extensionPage.keyboard.type("\"query\"");
+    const endpointAfterCompleteTab = await endpointEditor.locator(".cm-content").innerText();
+    const bodyAfterCompleteTab = await bodyEditor.locator(".cm-content").innerText();
+    expect(endpointAfterCompleteTab).toBe(endpointBeforeCompleteTab);
+    expect(bodyAfterCompleteTab).toContain("\"query\"");
 
-    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
     await bodyEditor.click();
     await extensionPage.keyboard.press("Control+a");
     await extensionPage.keyboard.type("{\n  \"");
