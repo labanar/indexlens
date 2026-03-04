@@ -17,31 +17,26 @@ A Chrome extension for exploring Elasticsearch clusters with encrypted credentia
 
 ## Screenshots
 
-<!-- Replace each placeholder with an actual screenshot -->
-
-### Setup Screen
-<!-- ![Setup Screen](docs/screenshots/setup-screen.png) -->
-`TODO: Add screenshot of the first-run passphrase setup screen`
-
-### Lock Screen
-<!-- ![Lock Screen](docs/screenshots/lock-screen.png) -->
-`TODO: Add screenshot of the lock/unlock screen`
-
 ### Dashboard
-<!-- ![Dashboard](docs/screenshots/dashboard.png) -->
-`TODO: Add screenshot of the cluster dashboard overview`
+![Dashboard](docs/screenshots/dashboard.png)
 
-### Spotlight Search
-<!-- ![Spotlight Search](docs/screenshots/spotlight-search.png) -->
-`TODO: Add screenshot of the spotlight command palette (Ctrl+Space)`
+### Indices
+![Indices](docs/screenshots/indices.png)
 
-### Indices & Documents
-<!-- ![Indices](docs/screenshots/indices.png) -->
-`TODO: Add screenshot of the indices list and document browser`
+### Documents
+![Documents](docs/screenshots/documents.png)
 
 ### REST Console
-<!-- ![REST Console](docs/screenshots/rest-console.png) -->
-`TODO: Add screenshot of the REST console with autocomplete visible`
+![REST Console](docs/screenshots/rest-console.png)
+
+### Spotlight Search
+![Spotlight Search](docs/screenshots/spotlight-search.png)
+
+### Setup Screen
+![Setup Screen](docs/screenshots/setup-screen.png)
+
+### Lock Screen
+![Lock Screen](docs/screenshots/lock-screen.png)
 
 ## Getting Started
 
@@ -138,6 +133,18 @@ This runs `build:extension` and then creates a deterministic zip at:
 - `artifacts/indexlens-vX.Y.Z.zip`
 
 The zip includes runtime files from `dist/` only and is suitable for extension distribution.
+
+### Regenerating Screenshots
+
+Screenshots in `docs/screenshots/` are captured automatically via Playwright against local Elasticsearch clusters.
+
+```bash
+npm run build                       # build the extension
+docker compose up -d                # start ES clusters
+node scripts/seed-clusters.mjs      # populate sample data
+npx tsx scripts/take-screenshots.mts  # capture screenshots
+docker compose down                 # clean up
+```
 
 ### Lint & Type-Check
 
