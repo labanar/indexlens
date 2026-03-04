@@ -36,8 +36,8 @@ jobs:
       - name: Unit tests
         run: npm run test
 
-      - name: Build and package extension
-        run: npm run package:extension
+      - name: Build extension
+        run: npm run build:extension
 
       - name: Upload extension artifact
         uses: actions/upload-artifact@v4
@@ -60,7 +60,10 @@ jobs:
             exit 0
           fi
 
+          # Zip the dist directory for the release asset
+          cd dist && zip -r ../indexlens-v${VERSION}.zip . && cd ..
+
           # Create tag and release
-          gh release create "${TAG}" artifacts/*.zip \
+          gh release create "${TAG}" indexlens-v${VERSION}.zip \
             --title "${TAG}" \
             --generate-notes

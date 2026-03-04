@@ -1,13 +1,12 @@
 {
   "name": "indexlens",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:extension": "npm run build",
-    "package:extension": "npm run build:extension && node scripts/package-extension.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -40,7 +39,6 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.2",
-    "archiver": "^7.0.1",
     "chrome-types": "^0.1.420",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
