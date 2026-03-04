@@ -29,6 +29,7 @@ function buildPlaceholder(fields: MappingField[]): string {
   const parts: string[] = [];
   if (keyword) parts.push(`${keyword.path}: example`);
   if (numeric) parts.push(`${numeric.path} > 10`);
+  if (keyword && parts.length < 3) parts.push(`${keyword.path}: *`);
 
   if (parts.length === 0) {
     const first = fields.find((f) => !f.isSubfield) ?? fields[0];

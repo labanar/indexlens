@@ -98,6 +98,13 @@ function tokenize(input: string): Token[] {
       continue;
     }
 
+    // wildcard `*` (used for exists queries: field: *)
+    if (input[i] === "*") {
+      tokens.push({ type: "field", value: "*", pos: i });
+      i++;
+      continue;
+    }
+
     // bare word (field name, value, NOT keyword)
     const start = i;
     while (i < input.length && /[^\s()&|:!><="]/.test(input[i])) {
@@ -330,6 +337,10 @@ function compile(
   switch (node.type) {
     case "comparison": {
       const { field, operator, value } = node;
+
+      if (operator === ":" && value === "*") {
+        return { exists: { field } };
+      }
 
       if (operator === ":") {
         if (shouldUseTerm(field, fieldMap)) {
