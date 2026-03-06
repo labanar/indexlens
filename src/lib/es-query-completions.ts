@@ -8,6 +8,8 @@ import type {
 } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
 import type { MappingField } from "@/lib/es-mapping";
+import type { ClusterConfig } from "@/types/cluster";
+import { fetchKeywordValues } from "@/lib/es-client";
 
 function buildFieldCompletions(fields: MappingField[]): Completion[] {
   return fields.map((f) => ({
@@ -219,6 +221,25 @@ function makeArrayElementApply(label: string, detail?: string) {
     if (isObjectValue(detail) || isArrayValue(detail)) {
       requestAnimationFrame(() => startCompletion(view));
     }
+  };
+}
+
+/**
+ * Apply function for keyword values – inserts a plain quoted string "value".
+ */
+function makeValueApply(value: string) {
+  return (view: EditorView, _: Completion, from: number, to: number) => {
+    const doc = view.state.doc.toString();
+    const hasQuoteBefore = from > 0 && doc[from - 1] === '"';
+    const hasQuoteAfter = to < doc.length && doc[to] === '"';
+    const actualFrom = hasQuoteBefore ? from - 1 : from;
+    const actualTo = hasQuoteAfter ? to + 1 : to;
+
+    const insert = `"${value}"`;
+    view.dispatch({
+      changes: { from: actualFrom, to: actualTo, insert },
+      selection: { anchor: actualFrom + insert.length },
+    });
   };
 }
 
@@ -504,6 +525,8 @@ interface ContextResult {
   options: Completion[];
   /** True when completions are array elements that need wrapping in {} */
   arrayElement: boolean;
+  /** Field name needing keyword value suggestions */
+  keywordValueField?: string;
 }
 
 function result(options: Completion[], arrayElement = false): ContextResult {
@@ -514,6 +537,7 @@ function getSuggestionsForContext(
   ancestors: string[],
   fieldOptions: Completion[],
   op: EndpointOp,
+  fields: MappingField[],
 ): ContextResult {
   const depth = ancestors.length;
 
@@ -541,7 +565,18 @@ function getSuggestionsForContext(
   // Inside range > fieldName → range params
   if (depth >= 2 && ancestors[depth - 2] === "range") return result(RANGE_PARAMS);
 
+  // Inside term > fieldName → suggest keyword values if available
+  if (depth >= 2 && ancestors[depth - 2] === "term") {
+    const fieldName = ancestors[depth - 1];
+    const field = fields.find(f => f.path === fieldName);
+    if (field && field.type === "keyword") {
+      return { options: MATCH_PARAMS, arrayElement: false, keywordValueField: fieldName };
+    }
+    return result(MATCH_PARAMS);
+  }
+
   // Inside match/term/etc > fieldName → match params
+  // TODO: handle terms query array values for keyword field suggestions
   if (depth >= 2 && FIELD_EXPECTING_QUERIES.has(ancestors[depth - 2])) return result(MATCH_PARAMS);
 
   // --- Special query types with their own params ---
@@ -622,6 +657,18 @@ function getSuggestionsForContext(
 }
 
 // ---------------------------------------------------------------------------
+// Endpoint → index name extractor
+// ---------------------------------------------------------------------------
+
+function extractIndexFromEndpoint(endpoint: string): string | null {
+  const cleaned = endpoint.split("?")[0].split("#")[0].replace(/^\/+/, "");
+  if (!cleaned) return null;
+  const firstSegment = cleaned.split("/")[0];
+  if (!firstSegment || firstSegment.startsWith("_")) return null;
+  return firstSegment;
+}
+
+// ---------------------------------------------------------------------------
 // Exported DSL completion provider
 // ---------------------------------------------------------------------------
 
@@ -633,12 +680,17 @@ function getSuggestionsForContext(
  * - Auto-quotes property names and inserts ": " / ": {}" / ": []"
  * - Shows suggestions immediately after { and , (key positions)
  * - Cascades: inserting an object/array value auto-opens next completions
+ * - Suggests keyword field values inside `term` queries
  */
-export function esDslCompletions(fields: MappingField[], endpoint: string) {
+export function esDslCompletions(
+  fields: MappingField[],
+  endpoint: string,
+  cluster?: ClusterConfig,
+) {
   const fieldOptions = buildFieldCompletions(fields);
   const op = detectEndpointOp(endpoint);
 
-  return (context: CompletionContext): CompletionResult | null => {
+  return async (context: CompletionContext): Promise<CompletionResult | null> => {
     const doc = context.state.doc.toString();
     const word = context.matchBefore(/[\w.]*/);
     if (!word) return null;
@@ -663,22 +715,97 @@ export function esDslCompletions(fields: MappingField[], endpoint: string) {
     }
 
     const ancestors = getJsonAncestors(doc, word.from);
-    const { options: rawOptions, arrayElement } = getSuggestionsForContext(ancestors, fieldOptions, op);
-    if (rawOptions.length === 0) return null;
+    const { options: rawOptions, arrayElement, keywordValueField } =
+      getSuggestionsForContext(ancestors, fieldOptions, op, fields);
+
+    let finalOptions = rawOptions;
+
+    // Fetch keyword values for term queries targeting keyword fields
+    if (keywordValueField && cluster) {
+      const target = extractIndexFromEndpoint(endpoint);
+      if (target) {
+        try {
+          const values = await fetchKeywordValues(cluster, target, keywordValueField);
+          const valueCompletions: Completion[] = values.map((v, i) => ({
+            label: v,
+            type: "text",
+            detail: "value",
+            boost: 20 + (values.length - i),
+            apply: makeValueApply(v),
+          }));
+          finalOptions = [...valueCompletions, ...rawOptions];
+        } catch {
+          // Silently fall back to just showing params
+        }
+      }
+    }
+
+    if (finalOptions.length === 0) return null;
 
     // Wrap every option with the appropriate apply function:
     // - arrayElement: wraps in { "key": value } for valid array items
     // - otherwise: plain "key": value
+    // Value completions already have their own apply fn, so skip wrapping those
     const applyFn = arrayElement ? makeArrayElementApply : makeApply;
-    const options = rawOptions.map((opt) => ({
-      ...opt,
-      apply: applyFn(opt.label, opt.detail),
-    }));
+    const options = finalOptions.map((opt) => {
+      if (opt.apply) return opt;
+      return { ...opt, apply: applyFn(opt.label, opt.detail) };
+    });
 
     return {
       from: word.from,
       options,
       filter: true,
     };
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Keyword value completions for the simple query bar
+// ---------------------------------------------------------------------------
+
+/** Completions for keyword field values in the simple query bar (field: value). */
+export function keywordValueCompletions(
+  fields: MappingField[],
+  cluster?: ClusterConfig,
+  target?: string,
+) {
+  return async (context: CompletionContext): Promise<CompletionResult | null> => {
+    if (!cluster || !target) return null;
+
+    const line = context.state.doc.lineAt(context.pos);
+    const textBefore = line.text.slice(0, context.pos - line.from);
+
+    // Match pattern: fieldName: [partial_value]
+    const match = textBefore.match(/([\w.]+)\s*:\s*([\w.]*)$/);
+    if (!match) return null;
+
+    const fieldName = match[1];
+    const partial = match[2];
+
+    const field = fields.find(f => f.path === fieldName);
+    if (!field || field.type !== "keyword") return null;
+
+    try {
+      const values = await fetchKeywordValues(cluster, target, fieldName);
+      if (values.length === 0) return null;
+
+      const options: Completion[] = values.map((v, i) => ({
+        label: v,
+        type: "text",
+        detail: "keyword value",
+        boost: values.length - i,
+      }));
+
+      const valueStart = context.pos - partial.length;
+
+      return {
+        from: valueStart,
+        options,
+        filter: true,
+      };
+    } catch {
+      return null;
+    }
   };
 }
