@@ -10,8 +10,9 @@ import { history, historyKeymap } from "@codemirror/commands";
 import { vim } from "@replit/codemirror-vim";
 import { cn } from "@/lib/utils";
 import { cmTheme } from "@/lib/codemirror-theme";
-import { fieldCompletions } from "@/lib/es-query-completions";
+import { fieldCompletions, keywordValueCompletions } from "@/lib/es-query-completions";
 import type { MappingField } from "@/lib/es-mapping";
+import type { ClusterConfig } from "@/types/cluster";
 
 const NUMERIC_TYPES = new Set([
   "long", "integer", "short", "byte", "float", "double",
@@ -46,6 +47,8 @@ interface QueryEditorProps {
   className?: string;
   vimMode?: boolean;
   autoFocus?: boolean;
+  cluster?: ClusterConfig;
+  indexName?: string;
 }
 
 export function QueryEditor({
@@ -55,6 +58,8 @@ export function QueryEditor({
   className,
   vimMode,
   autoFocus,
+  cluster,
+  indexName,
 }: QueryEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -79,7 +84,10 @@ export function QueryEditor({
         keymap.of(historyKeymap),
         cmTheme,
         autocompletion({
-          override: [fieldCompletions(fields)],
+          override: [
+            fieldCompletions(fields),
+            ...(cluster && indexName ? [keywordValueCompletions(fields, cluster, indexName)] : []),
+          ],
           activateOnTyping: true,
         }),
         keymap.of([
@@ -129,7 +137,7 @@ export function QueryEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [fields, hint, vimMode]);
+  }, [fields, hint, vimMode, cluster, indexName]);
 
   return (
     <div

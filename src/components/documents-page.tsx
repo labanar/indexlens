@@ -452,6 +452,8 @@ export function DocumentsPage({
             onExecute={handleExecuteQuery}
             onChange={(v) => { queryTextRef.current = v; }}
             vimMode={vimMode}
+            cluster={cluster}
+            indexName={indexName}
             autoFocus
           />
           <p className="text-xs text-destructive h-4">

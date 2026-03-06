@@ -609,6 +609,7 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
               key={`body-${editorKey}-${vimMode}`}
               fields={fields}
               endpoint={debouncedEndpoint}
+              cluster={cluster}
               initialValue={initialBodyRef.current}
               onSend={handleSend}
               onChange={(v) => { bodyRef.current = v; }}
@@ -1063,6 +1064,7 @@ function EndpointEditor({
 function BodyEditor({
   fields,
   endpoint,
+  cluster,
   initialValue,
   onSend,
   onChange,
@@ -1072,6 +1074,7 @@ function BodyEditor({
 }: {
   fields: MappingField[];
   endpoint: string;
+  cluster: ClusterConfig;
   initialValue?: string;
   onSend: () => void;
   onChange: (value: string) => void;
@@ -1109,7 +1112,7 @@ function BodyEditor({
         lineNumbers(),
         foldGutter(),
         autocompletion({
-          override: [esDslCompletions(fields, endpoint)],
+          override: [esDslCompletions(fields, endpoint, cluster)],
           activateOnTyping: true,
           selectOnOpen: false,
         }),
@@ -1213,7 +1216,7 @@ function BodyEditor({
       viewRef.current = null;
       onViewReady?.(null);
     };
-  }, [fields, endpoint, onViewReady, vimMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fields, endpoint, cluster, onViewReady, vimMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

@@ -64,3 +64,60 @@ export async function esRequest<T>(
 
   return res.json() as Promise<T>;
 }
+
+// ---------------------------------------------------------------------------
+// Keyword value fetching with in-memory cache
+// ---------------------------------------------------------------------------
+
+interface TermsAggResponse {
+  aggregations?: {
+    values?: {
+      buckets?: Array<{ key: string; doc_count: number }>;
+    };
+  };
+}
+
+const keywordValueCache = new Map<
+  string,
+  { values: string[]; timestamp: number }
+>();
+const CACHE_TTL_MS = 60_000;
+
+export async function fetchKeywordValues(
+  cluster: ClusterConfig,
+  target: string,
+  field: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const cacheKey = `${cluster.url}::${target}::${field}`;
+  const cached = keywordValueCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.values;
+  }
+
+  try {
+    const result = await esRequest<TermsAggResponse>(
+      cluster,
+      `/${encodeURIComponent(target)}/_search`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          size: 0,
+          aggs: {
+            values: {
+              terms: { field, size: 50 },
+            },
+          },
+        }),
+        signal,
+      },
+    );
+
+    const values =
+      result.aggregations?.values?.buckets?.map((b) => String(b.key)) ?? [];
+    keywordValueCache.set(cacheKey, { values, timestamp: Date.now() });
+    return values;
+  } catch {
+    return [];
+  }
+}
