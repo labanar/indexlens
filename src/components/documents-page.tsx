@@ -167,6 +167,11 @@ export function DocumentsPage({
     setSort(null);
   }, [activeTarget]);
 
+  // Close document preview when navigating to a different index
+  useEffect(() => {
+    setSelectedHit(null);
+  }, [indexName]);
+
   // Fetch mapping fields for autocomplete + query compilation
   useEffect(() => {
     const controller = new AbortController();
