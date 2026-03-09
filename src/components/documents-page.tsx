@@ -931,7 +931,7 @@ function ExportDocumentsDialog({
     }
   };
 
-  const pct = progress.total > 0 ? Math.round((progress.exported / progress.total) * 100) : 0;
+  const pct = progress.total > 0 ? Math.min(Math.round((progress.exported / progress.total) * 100), 100) : 0;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !exporting) onClose(); }}>

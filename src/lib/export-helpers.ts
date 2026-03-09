@@ -160,6 +160,7 @@ export async function exportDocuments(options: ExportOptions): Promise<void> {
       body: JSON.stringify({
         size: 0,
         query,
+        track_total_hits: true,
         pit: { id: pitId, keep_alive: "1m" },
       }),
       signal,
