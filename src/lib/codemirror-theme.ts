@@ -156,6 +156,15 @@ const viewerTheme = EditorView.theme({
     backgroundColor: currentLine,
     outline: `1px solid ${orange}`,
   },
+  ".cm-searchMatch": {
+    backgroundColor: "rgba(241, 250, 140, 0.22)",
+    outline: `1px solid rgba(241, 250, 140, 0.48)`,
+    borderRadius: "2px",
+  },
+  ".cm-searchMatch.cm-searchMatch-selected, .cm-searchMatch-selected": {
+    backgroundColor: "rgba(255, 184, 108, 0.32)",
+    outline: `1px solid ${orange}`,
+  },
   ".cm-tooltip": {
     backgroundColor: bg,
     color: fg,

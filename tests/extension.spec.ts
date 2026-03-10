@@ -850,6 +850,335 @@ test.describe("REST body autocomplete", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Preview search behavior
+// ---------------------------------------------------------------------------
+
+test.describe("Preview search", () => {
+  test("supports next/previous match navigation in REST response preview", async ({ extensionPage }) => {
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ index: "products" }]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        });
+        return;
+      }
+
+      if (url.includes("/products/_mapping")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            products: {
+              mappings: {
+                properties: {
+                  title: { type: "text" },
+                },
+              },
+            },
+          }),
+        });
+        return;
+      }
+
+      if (url.endsWith("/products/_search") && req.method() === "POST") {
+        const hits = Array.from({ length: 500 }, (_, i) => ({
+          _index: "products",
+          _id: String(i),
+          _score: 1,
+          _source: {
+            line: i,
+            text: i === 5 || i === 475 ? "alpha-needle" : `line-${i}`,
+          },
+        }));
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            took: 3,
+            timed_out: false,
+            hits: {
+              total: { value: hits.length, relation: "eq" },
+              hits,
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Search Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    await extensionPage.getByRole("button", { name: /^rest$/i }).click();
+    await extensionPage.getByRole("combobox").click();
+    await extensionPage.getByRole("option", { name: /^POST$/ }).click();
+
+    const endpointEditor = extensionPage.locator(".cm-editor").first();
+    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
+
+    await endpointEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("/products/_search");
+
+    await bodyEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type('{\n  "query": { "match_all": {} }\n}');
+
+    await extensionPage.getByRole("button", { name: /^send$/i }).click();
+    await expect(
+      extensionPage.locator("span").filter({ hasText: /^200 / }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    const responseSearchInput = extensionPage.getByTestId("rest-response-search-input");
+    await responseSearchInput.fill("alpha-needle");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    const responseMatchLocator = extensionPage
+      .getByTestId("rest-response-viewer")
+      .locator(".cm-searchMatch");
+    const responseSelectedMatchLocator = extensionPage
+      .getByTestId("rest-response-viewer")
+      .locator(".cm-searchMatch-selected");
+    await expect(responseMatchLocator.first()).toBeVisible();
+    await expect.poll(async () => responseMatchLocator.count()).toBeGreaterThan(0);
+    await expect(responseSelectedMatchLocator).toHaveCount(1);
+    const firstResponseSelectedOffset = await responseSelectedMatchLocator.first().evaluate(
+      (el) => (el as HTMLElement).offsetTop,
+    );
+
+    const responseScroller = extensionPage.getByTestId("rest-response-viewer").locator(".cm-scroller");
+    const initialScrollTop = await responseScroller.evaluate((el) => el.scrollTop);
+
+    await extensionPage.getByTestId("rest-response-search-next").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("2/2");
+    await expect(responseSelectedMatchLocator).toHaveCount(1);
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate(
+        (el) => (el as HTMLElement).offsetTop,
+      );
+    }).toBeGreaterThan(firstResponseSelectedOffset);
+    const secondResponseSelectedOffset = await responseSelectedMatchLocator.first().evaluate(
+      (el) => (el as HTMLElement).offsetTop,
+    );
+
+    await expect.poll(async () => {
+      return responseScroller.evaluate((el) => el.scrollTop);
+    }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("rest-response-search-next").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondResponseSelectedOffset);
+
+    await responseSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("2/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeGreaterThan(firstResponseSelectedOffset);
+
+    await responseSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondResponseSelectedOffset);
+
+    await extensionPage.getByTestId("rest-response-search-prev").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondResponseSelectedOffset);
+  });
+
+  test("supports match navigation in document preview sheet", async ({ extensionPage }) => {
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ index: "products" }]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        });
+        return;
+      }
+
+      if (url.includes("/products/_mapping")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            products: {
+              mappings: {
+                properties: {
+                  title: { type: "text" },
+                  description: { type: "text" },
+                },
+              },
+            },
+          }),
+        });
+        return;
+      }
+
+      if (url.endsWith("/products/_search") && req.method() === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            took: 2,
+            timed_out: false,
+            hits: {
+              total: { value: 1, relation: "eq" },
+              hits: [
+                {
+                  _index: "products",
+                  _id: "doc-1",
+                  _score: 1,
+                  _source: {
+                    title: "alpha-needle",
+                    description: `${"x".repeat(3000)} alpha-needle`,
+                  },
+                },
+              ],
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Documents Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    await extensionPage.getByRole("button", { name: /^indices$/i }).click();
+    await extensionPage.getByRole("button", { name: /^products$/i }).click();
+
+    await extensionPage.getByTestId("documents-row-0").click();
+    await expect(extensionPage.getByText("Document source")).toBeVisible({ timeout: 5_000 });
+
+    const documentSearchInput = extensionPage.getByTestId("document-preview-search-input");
+    await documentSearchInput.fill("alpha-needle");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    const documentMatchLocator = extensionPage
+      .getByTestId("document-preview-viewer")
+      .locator(".cm-searchMatch");
+    const documentSelectedMatchLocator = extensionPage
+      .getByTestId("document-preview-viewer")
+      .locator(".cm-searchMatch-selected");
+    await expect(documentMatchLocator.first()).toBeVisible();
+    await expect.poll(async () => documentMatchLocator.count()).toBeGreaterThan(0);
+    await expect(documentSelectedMatchLocator).toHaveCount(1);
+    const firstDocumentSelectedOffset = await documentSelectedMatchLocator.first().evaluate(
+      (el) => (el as HTMLElement).offsetTop,
+    );
+
+    const previewScroller = extensionPage.getByTestId("document-preview-viewer").locator(".cm-scroller");
+    const initialScrollTop = await previewScroller.evaluate((el) => el.scrollTop);
+
+    await extensionPage.getByTestId("document-preview-search-next").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("2/2");
+    await expect(documentSelectedMatchLocator).toHaveCount(1);
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate(
+        (el) => (el as HTMLElement).offsetTop,
+      );
+    }).toBeGreaterThan(firstDocumentSelectedOffset);
+    const secondDocumentSelectedOffset = await documentSelectedMatchLocator.first().evaluate(
+      (el) => (el as HTMLElement).offsetTop,
+    );
+    await expect.poll(async () => {
+      return previewScroller.evaluate((el) => el.scrollTop);
+    }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("document-preview-search-next").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondDocumentSelectedOffset);
+
+    await documentSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("2/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeGreaterThan(firstDocumentSelectedOffset);
+
+    await documentSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondDocumentSelectedOffset);
+
+    await extensionPage.getByTestId("document-preview-search-prev").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondDocumentSelectedOffset);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Toolbar icon click
 // ---------------------------------------------------------------------------
 
