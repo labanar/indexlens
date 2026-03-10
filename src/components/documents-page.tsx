@@ -886,10 +886,28 @@ function ExportDocumentsDialog({
   onClose: () => void;
 }) {
   const [format, setFormat] = useState<ExportFormat>("jsonl");
+  const [exportPageSize, setExportPageSize] = useState(5000);
+  const [customPageSize, setCustomPageSize] = useState("5000");
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress>({ exported: 0, total: 0 });
   const abortRef = useRef<AbortController | null>(null);
   const exportedRef = useRef(0);
+
+  const PAGE_SIZE_PRESETS = [1000, 2000, 5000, 10000] as const;
+
+  const handlePageSizePreset = (size: number) => {
+    if (exporting) return;
+    setExportPageSize(size);
+    setCustomPageSize(String(size));
+  };
+
+  const handleCustomPageSize = (value: string) => {
+    setCustomPageSize(value);
+    const n = parseInt(value, 10);
+    if (!isNaN(n) && n >= 1 && n <= 10000) {
+      setExportPageSize(n);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -906,6 +924,7 @@ function ExportDocumentsDialog({
         query,
         sort: sortClause,
         format,
+        pageSize: exportPageSize,
         onProgress: (p) => { setProgress(p); exportedRef.current = p.exported; },
         signal: controller.signal,
       });
@@ -964,6 +983,32 @@ function ExportDocumentsDialog({
                 JSON Array
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Page size</label>
+            <div className="flex gap-2">
+              {PAGE_SIZE_PRESETS.map((size) => (
+                <Button
+                  key={size}
+                  variant={exportPageSize === size ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handlePageSizePreset(size)}
+                  disabled={exporting}
+                >
+                  {numFmt.format(size)}
+                </Button>
+              ))}
+            </div>
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="Custom (1–10,000)"
+              value={customPageSize}
+              onChange={(e) => handleCustomPageSize(e.target.value)}
+              disabled={exporting}
+              className="w-40"
+            />
           </div>
 
           {exporting && (

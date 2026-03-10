@@ -49,6 +49,7 @@ export interface ExportOptions {
   query: object;
   sort?: Array<Record<string, unknown>>;
   format: ExportFormat;
+  pageSize?: number;
   onProgress: (progress: ExportProgress) => void;
   signal: AbortSignal;
 }
@@ -120,11 +121,10 @@ interface PitSearchResponse {
   pit_id?: string;
 }
 
-const PAGE_SIZE = 1000;
-
 export async function exportDocuments(options: ExportOptions): Promise<void> {
   const { cluster, indexPattern, query, sort, format, onProgress, signal } =
     options;
+  const pageSize = options.pageSize ?? 5000;
 
   // 1. Let the user pick a file location
   let fileHandle: FileSystemFileHandle;
@@ -185,7 +185,7 @@ export async function exportDocuments(options: ExportOptions): Promise<void> {
       }
 
       const body: Record<string, unknown> = {
-        size: PAGE_SIZE,
+        size: pageSize,
         query,
         sort: sortClause,
         pit: { id: pitId, keep_alive: "1m" },
@@ -226,7 +226,7 @@ export async function exportDocuments(options: ExportOptions): Promise<void> {
       const lastHit = hits[hits.length - 1];
       searchAfter = lastHit.sort;
 
-      if (hits.length < PAGE_SIZE) break;
+      if (hits.length < pageSize) break;
     }
 
     if (format === "json-array") {
