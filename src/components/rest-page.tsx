@@ -23,6 +23,8 @@ import {
   SaveIcon,
   Trash2Icon,
   PencilIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +54,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cmTheme, cmViewerTheme } from "@/lib/codemirror-theme";
+import {
+  createViewerSearchExtensions,
+  nextViewerSearchMatch,
+  previousViewerSearchMatch,
+  readViewerSearchState,
+  setViewerSearchQuery,
+  type ViewerSearchState,
+} from "@/lib/codemirror-viewer-search";
 import { esRequest } from "@/lib/es-client";
 import { fetchIndexFields } from "@/lib/es-mapping";
 import { esDslCompletions } from "@/lib/es-query-completions";
@@ -177,6 +187,12 @@ function formatTimestamp(ts: number): string {
 
 /** Annotation to mark auto-format transactions so they don't re-trigger. */
 const autoFormatAnnotation = Annotation.define<boolean>();
+const EMPTY_VIEWER_SEARCH_STATE: ViewerSearchState = {
+  activeMatch: 0,
+  hasMatches: false,
+  query: "",
+  totalMatches: 0,
+};
 
 /**
  * Map cursor position from unformatted to formatted text by counting
@@ -319,6 +335,8 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
   const [saveName, setSaveName] = useState("");
   const [renameTarget, setRenameTarget] = useState<SavedQuery | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [responseSearchQuery, setResponseSearchQuery] = useState("");
+  const [responseSearchState, setResponseSearchState] = useState<ViewerSearchState>(EMPTY_VIEWER_SEARCH_STATE);
 
   // Vim status (reported by whichever editor was last active)
   const [vimStatus, setVimStatus] = useState<VimStatus>({ mode: "NORMAL", command: "" });
@@ -331,6 +349,7 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
   const bodyRef = useRef("");
   const endpointRef = useRef("");
   const bodyEditorViewRef = useRef<EditorView | null>(null);
+  const responseViewRef = useRef<EditorView | null>(null);
   const debouncedEndpoint = useDebounce(endpoint, 400);
 
   // Load history + saved queries when cluster changes
@@ -442,6 +461,40 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  const handleResponseViewReady = useCallback((view: EditorView | null) => {
+    responseViewRef.current = view;
+    if (!view) {
+      setResponseSearchState(EMPTY_VIEWER_SEARCH_STATE);
+      return;
+    }
+    setResponseSearchState(setViewerSearchQuery(view, responseSearchQuery));
+  }, [responseSearchQuery]);
+
+  const handleResponseSearchChange = useCallback((query: string) => {
+    setResponseSearchQuery(query);
+    const view = responseViewRef.current;
+    if (!view) {
+      setResponseSearchState({
+        ...EMPTY_VIEWER_SEARCH_STATE,
+        query,
+      });
+      return;
+    }
+    setResponseSearchState(setViewerSearchQuery(view, query, { scrollToFirst: Boolean(query) }));
+  }, []);
+
+  const handleResponseSearchNext = useCallback(() => {
+    const view = responseViewRef.current;
+    if (!view) return;
+    setResponseSearchState(nextViewerSearchMatch(view));
+  }, []);
+
+  const handleResponseSearchPrevious = useCallback(() => {
+    const view = responseViewRef.current;
+    if (!view) return;
+    setResponseSearchState(previousViewerSearchMatch(view));
+  }, []);
 
   // Load a request into the editors
   const applyRequest = useCallback(
@@ -658,8 +711,49 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
             </Button>
           )}
         </div>
+        <div className="flex items-center gap-2 flex-wrap" data-testid="rest-response-search-toolbar">
+          <Input
+            data-testid="rest-response-search-input"
+            className="h-8 min-w-0 flex-1"
+            placeholder="Search response text"
+            value={responseSearchQuery}
+            onChange={(e) => handleResponseSearchChange(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="rest-response-search-prev"
+            onClick={handleResponseSearchPrevious}
+            disabled={!responseSearchQuery || !responseSearchState.hasMatches}
+          >
+            <ChevronUpIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="rest-response-search-next"
+            onClick={handleResponseSearchNext}
+            disabled={!responseSearchQuery || !responseSearchState.hasMatches}
+          >
+            <ChevronDownIcon className="size-4" />
+          </Button>
+          <span
+            data-testid="rest-response-search-count"
+            className="text-xs text-muted-foreground tabular-nums min-w-16 text-right"
+          >
+            {responseSearchQuery
+              ? `${responseSearchState.activeMatch}/${responseSearchState.totalMatches}`
+              : "0/0"}
+          </span>
+        </div>
         <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border">
-          <ResponseViewer value={responseText} />
+          <ResponseViewer
+            value={responseText}
+            onViewReady={handleResponseViewReady}
+            onSearchStateChange={setResponseSearchState}
+          />
         </div>
       </div>
 
@@ -1230,7 +1324,15 @@ function BodyEditor({
 // Response viewer (read-only)
 // ---------------------------------------------------------------------------
 
-function ResponseViewer({ value }: { value: string }) {
+function ResponseViewer({
+  value,
+  onViewReady,
+  onSearchStateChange,
+}: {
+  value: string;
+  onViewReady?: (view: EditorView | null) => void;
+  onSearchStateChange?: (searchState: ViewerSearchState) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
@@ -1245,18 +1347,24 @@ function ResponseViewer({ value }: { value: string }) {
         cmViewerTheme,
         lineNumbers(),
         foldGutter(),
+        ...createViewerSearchExtensions((view) => {
+          onSearchStateChange?.(readViewerSearchState(view));
+        }),
         EditorView.lineWrapping,
       ],
     });
 
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
+    onViewReady?.(view);
+    onSearchStateChange?.(readViewerSearchState(view));
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      onViewReady?.(null);
     };
-  }, [value]);
+  }, [value, onViewReady, onSearchStateChange]);
 
   return (
     <div

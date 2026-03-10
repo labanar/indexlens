@@ -850,6 +850,249 @@ test.describe("REST body autocomplete", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Preview search behavior
+// ---------------------------------------------------------------------------
+
+test.describe("Preview search", () => {
+  test("supports next/previous match navigation in REST response preview", async ({ extensionPage }) => {
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ index: "products" }]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        });
+        return;
+      }
+
+      if (url.includes("/products/_mapping")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            products: {
+              mappings: {
+                properties: {
+                  title: { type: "text" },
+                },
+              },
+            },
+          }),
+        });
+        return;
+      }
+
+      if (url.endsWith("/products/_search") && req.method() === "POST") {
+        const hits = Array.from({ length: 500 }, (_, i) => ({
+          _index: "products",
+          _id: String(i),
+          _score: 1,
+          _source: {
+            line: i,
+            text: i === 5 || i === 475 ? "alpha-needle" : `line-${i}`,
+          },
+        }));
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            took: 3,
+            timed_out: false,
+            hits: {
+              total: { value: hits.length, relation: "eq" },
+              hits,
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Search Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    await extensionPage.getByRole("button", { name: /^rest$/i }).click();
+    await extensionPage.getByRole("combobox").click();
+    await extensionPage.getByRole("option", { name: /^POST$/ }).click();
+
+    const endpointEditor = extensionPage.locator(".cm-editor").first();
+    const bodyEditor = extensionPage.locator(".cm-editor").nth(1);
+
+    await endpointEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type("/products/_search");
+
+    await bodyEditor.click();
+    await extensionPage.keyboard.press("Control+a");
+    await extensionPage.keyboard.type('{\n  "query": { "match_all": {} }\n}');
+
+    await extensionPage.getByRole("button", { name: /^send$/i }).click();
+    await expect(
+      extensionPage.locator("span").filter({ hasText: /^200 / }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await extensionPage.getByTestId("rest-response-search-input").fill("alpha-needle");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+
+    const responseScroller = extensionPage.getByTestId("rest-response-viewer").locator(".cm-scroller");
+    const initialScrollTop = await responseScroller.evaluate((el) => el.scrollTop);
+
+    await extensionPage.getByTestId("rest-response-search-next").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("2/2");
+
+    await expect.poll(async () => {
+      return responseScroller.evaluate((el) => el.scrollTop);
+    }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("rest-response-search-prev").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+  });
+
+  test("supports match navigation in document preview sheet", async ({ extensionPage }) => {
+    await extensionPage.route("http://127.0.0.1:9200/**", async (route) => {
+      const req = route.request();
+      const url = req.url();
+
+      if (url.includes("/_cat/indices")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{ index: "products" }]),
+        });
+        return;
+      }
+
+      if (url.includes("/_cat/aliases")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "[]",
+        });
+        return;
+      }
+
+      if (url.includes("/products/_mapping")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            products: {
+              mappings: {
+                properties: {
+                  title: { type: "text" },
+                  description: { type: "text" },
+                },
+              },
+            },
+          }),
+        });
+        return;
+      }
+
+      if (url.endsWith("/products/_search") && req.method() === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            took: 2,
+            timed_out: false,
+            hits: {
+              total: { value: 1, relation: "eq" },
+              hits: [
+                {
+                  _index: "products",
+                  _id: "doc-1",
+                  _score: 1,
+                  _source: {
+                    title: "alpha-needle",
+                    description: `${"x".repeat(3000)} alpha-needle`,
+                  },
+                },
+              ],
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
+
+    await expect(
+      extensionPage.getByRole("heading", { name: /welcome to indexlens/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await extensionPage.getByLabel("Passphrase", { exact: true }).fill(TEST_PASSPHRASE);
+    await extensionPage.getByLabel("Confirm passphrase").fill(TEST_PASSPHRASE);
+    await extensionPage.getByRole("button", { name: /create passphrase/i }).click();
+    await expect(
+      extensionPage.getByRole("button", { name: /lock/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await extensionPage.getByRole("button", { name: /clusters/i }).click();
+    await extensionPage.getByRole("menuitem", { name: /add cluster/i }).click();
+    await extensionPage.getByLabel("Name").fill("Documents Cluster");
+    await extensionPage.getByLabel("URL").fill("http://127.0.0.1:9200");
+    await extensionPage.getByRole("button", { name: /^add cluster$/i }).click();
+
+    await extensionPage.getByRole("button", { name: /^indices$/i }).click();
+    await extensionPage.getByRole("button", { name: /^products$/i }).click();
+
+    await extensionPage.getByTestId("documents-row-0").click();
+    await expect(extensionPage.getByText("Document source")).toBeVisible({ timeout: 5_000 });
+
+    await extensionPage.getByTestId("document-preview-search-input").fill("alpha-needle");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+
+    const previewScroller = extensionPage.getByTestId("document-preview-viewer").locator(".cm-scroller");
+    const initialScrollTop = await previewScroller.evaluate((el) => el.scrollTop);
+
+    await extensionPage.getByTestId("document-preview-search-next").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("2/2");
+    await expect.poll(async () => {
+      return previewScroller.evaluate((el) => el.scrollTop);
+    }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("document-preview-search-prev").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Toolbar icon click
 // ---------------------------------------------------------------------------
 

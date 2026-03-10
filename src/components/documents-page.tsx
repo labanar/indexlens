@@ -563,9 +563,10 @@ export function DocumentsPage({
                 </TableCell>
               </TableRow>
             ) : (
-              hits.map((hit) => (
+              hits.map((hit, index) => (
                 <TableRow
                   key={hitKey(hit)}
+                  data-testid={`documents-row-${index}`}
                   className="cursor-pointer"
                   data-state={selected.has(hitKey(hit)) ? "selected" : undefined}
                   onClick={() => setSelectedHit(hit)}

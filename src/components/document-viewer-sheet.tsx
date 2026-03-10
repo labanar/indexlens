@@ -4,8 +4,17 @@ import { EditorState } from "@codemirror/state";
 import { json } from "@codemirror/lang-json";
 import { foldGutter } from "@codemirror/language";
 import { cmViewerTheme } from "@/lib/codemirror-theme";
-import { CopyIcon, CheckIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  createViewerSearchExtensions,
+  nextViewerSearchMatch,
+  previousViewerSearchMatch,
+  readViewerSearchState,
+  setViewerSearchQuery,
+  type ViewerSearchState,
+} from "@/lib/codemirror-viewer-search";
 import {
   Sheet,
   SheetContent,
@@ -44,11 +53,20 @@ function buildMetaObject(hit: SearchHit): Record<string, unknown> {
 const DEFAULT_WIDTH = 576; // matches max-w-xl (36rem)
 const MIN_WIDTH = 320;
 const MAX_WIDTH_RATIO = 0.8; // 80% of viewport
+const EMPTY_SEARCH_STATE: ViewerSearchState = {
+  activeMatch: 0,
+  hasMatches: false,
+  query: "",
+  totalMatches: 0,
+};
 
 export function DocumentViewerSheet({ hit, onClose }: DocumentViewerSheetProps) {
   const [showMeta, setShowMeta] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sheetWidth, setSheetWidth] = useState(DEFAULT_WIDTH);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchState, setSearchState] = useState<ViewerSearchState>(EMPTY_SEARCH_STATE);
+  const sourceViewRef = useRef<EditorView | null>(null);
   const isDragging = useRef(false);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -95,6 +113,40 @@ export function DocumentViewerSheet({ hit, onClose }: DocumentViewerSheetProps) 
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleSourceViewReady = useCallback((view: EditorView | null) => {
+    sourceViewRef.current = view;
+    if (!view) {
+      setSearchState(EMPTY_SEARCH_STATE);
+      return;
+    }
+    setSearchState(setViewerSearchQuery(view, searchQuery));
+  }, [searchQuery]);
+
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    const view = sourceViewRef.current;
+    if (!view) {
+      setSearchState({
+        ...EMPTY_SEARCH_STATE,
+        query,
+      });
+      return;
+    }
+    setSearchState(setViewerSearchQuery(view, query, { scrollToFirst: Boolean(query) }));
+  }, []);
+
+  const handleSearchNext = useCallback(() => {
+    const view = sourceViewRef.current;
+    if (!view) return;
+    setSearchState(nextViewerSearchMatch(view));
+  }, []);
+
+  const handleSearchPrevious = useCallback(() => {
+    const view = sourceViewRef.current;
+    if (!view) return;
+    setSearchState(previousViewerSearchMatch(view));
+  }, []);
+
   return (
     <Sheet open={hit !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
@@ -137,15 +189,64 @@ export function DocumentViewerSheet({ hit, onClose }: DocumentViewerSheetProps) 
             <JsonViewer value={metaFormatted} />
           </div>
         )}
-        <div className="flex-1 overflow-hidden rounded-md border">
-          {hit && <JsonViewer value={sourceFormatted} />}
+        <div className="flex items-center gap-2 flex-wrap" data-testid="document-preview-search-toolbar">
+          <Input
+            data-testid="document-preview-search-input"
+            className="h-8 min-w-0 flex-1"
+            placeholder="Search preview text"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="document-preview-search-prev"
+            onClick={handleSearchPrevious}
+            disabled={!searchQuery || !searchState.hasMatches}
+          >
+            <ChevronUpIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="document-preview-search-next"
+            onClick={handleSearchNext}
+            disabled={!searchQuery || !searchState.hasMatches}
+          >
+            <ChevronDownIcon className="size-4" />
+          </Button>
+          <span
+            data-testid="document-preview-search-count"
+            className="text-xs text-muted-foreground tabular-nums min-w-16 text-right"
+          >
+            {searchQuery ? `${searchState.activeMatch}/${searchState.totalMatches}` : "0/0"}
+          </span>
+        </div>
+        <div className="flex-1 overflow-hidden rounded-md border" data-testid="document-preview-viewer">
+          {hit && (
+            <JsonViewer
+              value={sourceFormatted}
+              onViewReady={handleSourceViewReady}
+              onSearchStateChange={setSearchState}
+            />
+          )}
         </div>
       </SheetContent>
     </Sheet>
   );
 }
 
-function JsonViewer({ value }: { value: string }) {
+function JsonViewer({
+  value,
+  onViewReady,
+  onSearchStateChange,
+}: {
+  value: string;
+  onViewReady?: (view: EditorView | null) => void;
+  onSearchStateChange?: (searchState: ViewerSearchState) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
@@ -160,18 +261,24 @@ function JsonViewer({ value }: { value: string }) {
         cmViewerTheme,
         lineNumbers(),
         foldGutter(),
+        ...createViewerSearchExtensions((view) => {
+          onSearchStateChange?.(readViewerSearchState(view));
+        }),
         EditorView.lineWrapping,
       ],
     });
 
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
+    onViewReady?.(view);
+    onSearchStateChange?.(readViewerSearchState(view));
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      onViewReady?.(null);
     };
-  }, [value]);
+  }, [value, onViewReady, onSearchStateChange]);
 
   return <div ref={containerRef} className="h-full [&_.cm-editor]:h-full [&_.cm-editor]:outline-none" />;
 }
