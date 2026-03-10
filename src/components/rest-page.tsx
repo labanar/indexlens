@@ -718,6 +718,12 @@ export function RestPage({ cluster, pendingQuery, consumePendingQuery, vimMode, 
             placeholder="Search response text"
             value={responseSearchQuery}
             onChange={(e) => handleResponseSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              if (!responseSearchQuery || !responseSearchState.hasMatches) return;
+              e.preventDefault();
+              handleResponseSearchNext();
+            }}
           />
           <Button
             type="button"

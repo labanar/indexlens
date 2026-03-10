@@ -146,11 +146,47 @@ export function setViewerSearchQuery(
 }
 
 export function nextViewerSearchMatch(view: EditorView): ViewerSearchState {
+  const previousState = readViewerSearchState(view);
+  if (!previousState.hasMatches) {
+    return previousState;
+  }
+
   findNext(view);
-  return readViewerSearchState(view);
+  let nextState = readViewerSearchState(view);
+  if (
+    previousState.activeMatch === previousState.totalMatches &&
+    nextState.activeMatch === previousState.activeMatch
+  ) {
+    view.dispatch({
+      selection: { anchor: 0 },
+      scrollIntoView: true,
+    });
+    findNext(view);
+    nextState = readViewerSearchState(view);
+  }
+
+  return nextState;
 }
 
 export function previousViewerSearchMatch(view: EditorView): ViewerSearchState {
+  const previousState = readViewerSearchState(view);
+  if (!previousState.hasMatches) {
+    return previousState;
+  }
+
   findPrevious(view);
-  return readViewerSearchState(view);
+  let nextState = readViewerSearchState(view);
+  if (
+    previousState.activeMatch === 1 &&
+    nextState.activeMatch === previousState.activeMatch
+  ) {
+    view.dispatch({
+      selection: { anchor: view.state.doc.length },
+      scrollIntoView: true,
+    });
+    findPrevious(view);
+    nextState = readViewerSearchState(view);
+  }
+
+  return nextState;
 }

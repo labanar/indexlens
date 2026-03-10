@@ -962,7 +962,8 @@ test.describe("Preview search", () => {
       extensionPage.locator("span").filter({ hasText: /^200 / }),
     ).toBeVisible({ timeout: 10_000 });
 
-    await extensionPage.getByTestId("rest-response-search-input").fill("alpha-needle");
+    const responseSearchInput = extensionPage.getByTestId("rest-response-search-input");
+    await responseSearchInput.fill("alpha-needle");
     await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
     const responseMatchLocator = extensionPage
       .getByTestId("rest-response-viewer")
@@ -995,6 +996,24 @@ test.describe("Preview search", () => {
     await expect.poll(async () => {
       return responseScroller.evaluate((el) => el.scrollTop);
     }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("rest-response-search-next").click();
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondResponseSelectedOffset);
+
+    await responseSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("2/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeGreaterThan(firstResponseSelectedOffset);
+
+    await responseSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return responseSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondResponseSelectedOffset);
 
     await extensionPage.getByTestId("rest-response-search-prev").click();
     await expect(extensionPage.getByTestId("rest-response-search-count")).toHaveText("1/2");
@@ -1099,7 +1118,8 @@ test.describe("Preview search", () => {
     await extensionPage.getByTestId("documents-row-0").click();
     await expect(extensionPage.getByText("Document source")).toBeVisible({ timeout: 5_000 });
 
-    await extensionPage.getByTestId("document-preview-search-input").fill("alpha-needle");
+    const documentSearchInput = extensionPage.getByTestId("document-preview-search-input");
+    await documentSearchInput.fill("alpha-needle");
     await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
     const documentMatchLocator = extensionPage
       .getByTestId("document-preview-viewer")
@@ -1131,6 +1151,24 @@ test.describe("Preview search", () => {
     await expect.poll(async () => {
       return previewScroller.evaluate((el) => el.scrollTop);
     }).toBeGreaterThan(initialScrollTop);
+
+    await extensionPage.getByTestId("document-preview-search-next").click();
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondDocumentSelectedOffset);
+
+    await documentSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("2/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeGreaterThan(firstDocumentSelectedOffset);
+
+    await documentSearchInput.press("Enter");
+    await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");
+    await expect.poll(async () => {
+      return documentSelectedMatchLocator.first().evaluate((el) => (el as HTMLElement).offsetTop);
+    }).toBeLessThan(secondDocumentSelectedOffset);
 
     await extensionPage.getByTestId("document-preview-search-prev").click();
     await expect(extensionPage.getByTestId("document-preview-search-count")).toHaveText("1/2");

@@ -196,6 +196,12 @@ export function DocumentViewerSheet({ hit, onClose }: DocumentViewerSheetProps) 
             placeholder="Search preview text"
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              if (!searchQuery || !searchState.hasMatches) return;
+              e.preventDefault();
+              handleSearchNext();
+            }}
           />
           <Button
             type="button"
