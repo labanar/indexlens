@@ -194,10 +194,11 @@ function formatDate(iso: string): string {
 interface IndicesPageProps {
   cluster: ClusterConfig;
   onNavigateIndex: (indexName: string) => void;
+  filter: string;
+  onFilterChange: (value: string) => void;
 }
 
-export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
-  const [filter, setFilter] = useState("");
+export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }: IndicesPageProps) {
   const debouncedFilter = useDebounce(filter, DEBOUNCE_MS);
 
   const [rows, setRows] = useState<IndexRow[]>([]);
@@ -207,8 +208,6 @@ export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [showSystem, setShowSystem] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "name", dir: "asc" });
-  const [refreshKey, setRefreshKey] = useState(0);
-
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -267,8 +266,11 @@ export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
         if (!signal.aborted) setLoading(false);
       }
     },
-    [cluster, debouncedFilter, refreshKey],
+    [cluster, debouncedFilter],
   );
+
+  const fetchIndicesRef = useRef(fetchIndices);
+  fetchIndicesRef.current = fetchIndices;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -331,7 +333,7 @@ export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
   const handleAction = (action: string, indexNames: string[]) => {
     if (action === "refresh") {
       executeRefresh(cluster, indexNames, () => {
-        setRefreshKey((k) => k + 1);
+        fetchIndicesRef.current(new AbortController().signal);
         if (indexNames.length > 1) setSelected(new Set());
       });
       return;
@@ -340,7 +342,7 @@ export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
   };
 
   const handleActionSuccess = () => {
-    setRefreshKey((k) => k + 1);
+    fetchIndicesRef.current(new AbortController().signal);
     if (actionDialog && actionDialog.indexNames.length > 1) {
       setSelected(new Set());
     }
@@ -355,7 +357,7 @@ export function IndicesPage({ cluster, onNavigateIndex }: IndicesPageProps) {
           <Input
             placeholder="Filter indices..."
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => onFilterChange(e.target.value)}
             className="pl-9"
           />
         </div>
