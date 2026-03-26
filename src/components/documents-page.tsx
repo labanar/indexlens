@@ -151,6 +151,8 @@ export function DocumentsPage({
   const [indexTargets, setIndexTargets] = useState<IndexTarget[]>([]);
   const queryTextRef = useRef("");
   const [sort, setSort] = useState<SortState | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollLeftRef = useRef(0);
 
   // Selection state – keys are hitKey(hit) = `_index\0_id`
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -161,6 +163,19 @@ export function DocumentsPage({
   useEffect(() => {
     setSelected(new Set());
   }, [hits, page, activeQuery, activeTarget]);
+
+  // Restore horizontal scroll after sort-triggered loading completes
+  useEffect(() => {
+    if (!loading && savedScrollLeftRef.current > 0) {
+      const saved = savedScrollLeftRef.current;
+      savedScrollLeftRef.current = 0;
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollLeft = saved;
+        }
+      });
+    }
+  }, [loading]);
 
   // Reset sort when the index target changes
   useEffect(() => {
@@ -270,6 +285,8 @@ export function DocumentsPage({
       // Check if this field is sortable
       const resolved = resolveSortField(field, fields);
       if (resolved === null) return;
+
+      savedScrollLeftRef.current = scrollContainerRef.current?.scrollLeft ?? 0;
 
       setSort((prev) => {
         if (prev && prev.field === field) {
@@ -508,7 +525,7 @@ export function DocumentsPage({
       </div>
 
       {/* Table */}
-      <div className="rounded-md border flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="rounded-md border flex-1 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
