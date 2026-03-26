@@ -172,6 +172,11 @@ export function DocumentsPage({
       requestAnimationFrame(() => {
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollLeft = saved;
+          // Clear pinned column widths so columns can auto-size again
+          const ths = scrollContainerRef.current.querySelectorAll("thead th");
+          ths.forEach((th) => {
+            (th as HTMLElement).style.width = "";
+          });
         }
       });
     }
@@ -287,6 +292,14 @@ export function DocumentsPage({
       if (resolved === null) return;
 
       savedScrollLeftRef.current = scrollContainerRef.current?.scrollLeft ?? 0;
+
+      // Pin column widths to prevent content-driven shift during sort
+      if (scrollContainerRef.current && savedScrollLeftRef.current > 0) {
+        const ths = scrollContainerRef.current.querySelectorAll("thead th");
+        ths.forEach((th) => {
+          (th as HTMLElement).style.width = (th as HTMLElement).offsetWidth + "px";
+        });
+      }
 
       setSort((prev) => {
         if (prev && prev.field === field) {
