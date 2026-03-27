@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -165,20 +165,20 @@ export function DocumentsPage({
   }, [hits, page, activeQuery, activeTarget]);
 
   // Restore horizontal scroll after sort-triggered loading completes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!loading && savedScrollLeftRef.current > 0) {
       const saved = savedScrollLeftRef.current;
       savedScrollLeftRef.current = 0;
-      requestAnimationFrame(() => {
-        if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollLeft = saved;
-          // Clear pinned column widths so columns can auto-size again
-          const ths = scrollContainerRef.current.querySelectorAll("thead th");
-          ths.forEach((th) => {
-            (th as HTMLElement).style.width = "";
-          });
-        }
-      });
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollLeft = saved;
+        // Defer width clearing to avoid reflow shifting scroll
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            const ths = scrollContainerRef.current.querySelectorAll("thead th");
+            ths.forEach((th) => { (th as HTMLElement).style.width = ""; });
+          }
+        });
+      }
     }
   }, [loading]);
 
