@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -151,6 +151,8 @@ export function DocumentsPage({
   const [indexTargets, setIndexTargets] = useState<IndexTarget[]>([]);
   const queryTextRef = useRef("");
   const [sort, setSort] = useState<SortState | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollLeftRef = useRef(0);
 
   // Selection state – keys are hitKey(hit) = `_index\0_id`
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -161,6 +163,24 @@ export function DocumentsPage({
   useEffect(() => {
     setSelected(new Set());
   }, [hits, page, activeQuery, activeTarget]);
+
+  // Restore horizontal scroll after sort-triggered loading completes
+  useLayoutEffect(() => {
+    if (!loading && savedScrollLeftRef.current > 0) {
+      const saved = savedScrollLeftRef.current;
+      savedScrollLeftRef.current = 0;
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollLeft = saved;
+        // Defer width clearing to avoid reflow shifting scroll
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            const ths = scrollContainerRef.current.querySelectorAll("thead th");
+            ths.forEach((th) => { (th as HTMLElement).style.width = ""; });
+          }
+        });
+      }
+    }
+  }, [loading]);
 
   // Reset sort when the index target changes
   useEffect(() => {
@@ -270,6 +290,16 @@ export function DocumentsPage({
       // Check if this field is sortable
       const resolved = resolveSortField(field, fields);
       if (resolved === null) return;
+
+      savedScrollLeftRef.current = scrollContainerRef.current?.scrollLeft ?? 0;
+
+      // Pin column widths to prevent content-driven shift during sort
+      if (scrollContainerRef.current && savedScrollLeftRef.current > 0) {
+        const ths = scrollContainerRef.current.querySelectorAll("thead th");
+        ths.forEach((th) => {
+          (th as HTMLElement).style.width = (th as HTMLElement).offsetWidth + "px";
+        });
+      }
 
       setSort((prev) => {
         if (prev && prev.field === field) {
@@ -508,7 +538,7 @@ export function DocumentsPage({
       </div>
 
       {/* Table */}
-      <div className="rounded-md border flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="rounded-md border flex-1 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>

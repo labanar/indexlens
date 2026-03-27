@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import {
   SearchIcon,
   ChevronLeftIcon,
@@ -208,6 +208,8 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
   const [error, setError] = useState<string | null>(null);
   const [showSystem, setShowSystem] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "name", dir: "asc" });
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollLeftRef = useRef(0);
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -297,6 +299,7 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
 
   // Sort handler
   const handleSort = (key: SortKey) => {
+    savedScrollLeftRef.current = scrollContainerRef.current?.scrollLeft ?? 0;
     setSort((prev) =>
       prev.key === key
         ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
@@ -304,6 +307,17 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
     );
     setPage(0);
   };
+
+  // Restore horizontal scroll after sort
+  useLayoutEffect(() => {
+    if (savedScrollLeftRef.current > 0) {
+      const saved = savedScrollLeftRef.current;
+      savedScrollLeftRef.current = 0;
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollLeft = saved;
+      }
+    }
+  }, [sort]);
 
   // Selection helpers
   const allPageSelected = pageRows.length > 0 && pageRows.every((r) => selected.has(r.name));
@@ -374,7 +388,7 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
       </div>
 
       {/* Table */}
-      <div className="rounded-md border flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="rounded-md border flex-1 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
