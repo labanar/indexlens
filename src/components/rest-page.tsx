@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { EditorView, keymap, lineNumbers, placeholder as cmPlaceholder, ViewPlugin } from "@codemirror/view";
+import { EditorView, drawSelection, keymap, lineNumbers, placeholder as cmPlaceholder, ViewPlugin } from "@codemirror/view";
 import { EditorState, Annotation, Transaction } from "@codemirror/state";
 import { vim, getCM } from "@replit/codemirror-vim";
 import { json, jsonParseLinter } from "@codemirror/lang-json";
@@ -1113,7 +1113,7 @@ function EndpointEditor({
     if (!containerRef.current) return;
 
     const extensions = [
-      ...(vimMode ? [vim()] : []),
+      ...(vimMode ? [vim(), drawSelection()] : []),
       history(),
       keymap.of(historyKeymap),
       cmTheme,
@@ -1235,7 +1235,7 @@ function BodyEditor({
     const state = EditorState.create({
       doc: docRef.current,
       extensions: [
-        ...(vimMode ? [vim()] : []),
+        ...(vimMode ? [vim(), drawSelection()] : []),
         history(),
         keymap.of(historyKeymap),
         json(),
