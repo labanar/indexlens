@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from "react";
-import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
+import { EditorView, drawSelection, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import {
   autocompletion,
@@ -79,7 +79,7 @@ export function QueryEditor({
     const state = EditorState.create({
       doc: existingDoc ?? "",
       extensions: [
-        ...(vimMode ? [vim()] : []),
+        ...(vimMode ? [vim(), drawSelection()] : []),
         history(),
         keymap.of(historyKeymap),
         cmTheme,
