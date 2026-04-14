@@ -62,7 +62,7 @@ const editorTheme = EditorView.theme({
   },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
     {
-      backgroundColor: currentLine,
+      backgroundColor: comment,
     },
   ".cm-activeLine": {
     backgroundColor: "transparent",
@@ -132,7 +132,7 @@ const viewerTheme = EditorView.theme({
   },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
     {
-      backgroundColor: currentLine,
+      backgroundColor: comment,
     },
   ".cm-activeLine": {
     backgroundColor: "transparent",
