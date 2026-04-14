@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { json } from "@codemirror/lang-json";
@@ -16,6 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { esRequest } from "@/lib/es-client";
 import type { ClusterConfig } from "@/types/cluster";
 
+const DEFAULT_WIDTH = 576;
+const MIN_WIDTH = 320;
+const MAX_WIDTH_RATIO = 0.8;
+
 interface IndexInfoSheetProps {
   indexName: string | null;
   cluster: ClusterConfig;
@@ -29,6 +33,33 @@ function globToRegex(pattern: string): RegExp {
 }
 
 export function IndexInfoSheet({ indexName, cluster, onClose }: IndexInfoSheetProps) {
+  const [sheetWidth, setSheetWidth] = useState(DEFAULT_WIDTH);
+  const isDragging = useRef(false);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const newWidth = window.innerWidth - ev.clientX;
+      const maxWidth = window.innerWidth * MAX_WIDTH_RATIO;
+      setSheetWidth(Math.min(maxWidth, Math.max(MIN_WIDTH, newWidth)));
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
+
   const [mappings, setMappings] = useState<string | null>(null);
   const [mappingsLoading, setMappingsLoading] = useState(false);
   const [mappingsError, setMappingsError] = useState<string | null>(null);
@@ -158,7 +189,8 @@ export function IndexInfoSheet({ indexName, cluster, onClose }: IndexInfoSheetPr
 
   return (
     <Sheet open={indexName !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full flex flex-col p-6 sm:max-w-xl">
+      <SheetContent side="right" className="w-full flex flex-col p-6" style={{ width: sheetWidth, maxWidth: sheetWidth }}>
+        <div onMouseDown={handleDragStart} className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/10 transition-colors z-10" />
         <SheetHeader className="p-0">
           <SheetTitle className="font-mono text-sm truncate">{indexName}</SheetTitle>
           <SheetDescription>Index information</SheetDescription>
