@@ -10,6 +10,7 @@ import {
   XIcon,
   PlusIcon,
   Loader2Icon,
+  InfoIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,10 @@ export function IndexActionsDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => onAction("indexInfo", [indexName])}>
+          <InfoIcon />
+          Index Info
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onAction("aliases", [indexName])}>
           <TagIcon />
           Manage Aliases

@@ -37,6 +37,7 @@ import {
   executeRefresh,
   type ActionDialog,
 } from "@/components/index-actions";
+import { IndexInfoSheet } from "@/components/index-info-sheet";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -213,6 +214,7 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
 
   // Action dialog state
   const [actionDialog, setActionDialog] = useState<ActionDialog | null>(null);
+  const [infoIndex, setInfoIndex] = useState<string | null>(null);
 
   // Reset page when filter or page size changes
   useEffect(() => {
@@ -336,6 +338,10 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
         fetchIndicesRef.current(new AbortController().signal);
         if (indexNames.length > 1) setSelected(new Set());
       });
+      return;
+    }
+    if (action === "indexInfo") {
+      setInfoIndex(indexNames[0]);
       return;
     }
     setActionDialog({ action, indexNames });
@@ -584,6 +590,11 @@ export function IndicesPage({ cluster, onNavigateIndex, filter, onFilterChange }
         cluster={cluster}
         onClose={() => setActionDialog(null)}
         onSuccess={handleActionSuccess}
+      />
+      <IndexInfoSheet
+        indexName={infoIndex}
+        cluster={cluster}
+        onClose={() => setInfoIndex(null)}
       />
     </div>
   );
